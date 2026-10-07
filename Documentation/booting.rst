@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: GPL-2.0-only
+
 ==================================
 在 Arduino Leonardo 上引导 Leonix
 ==================================

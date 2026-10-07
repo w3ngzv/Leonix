@@ -64,5 +64,8 @@ Documentation/references/index.rst
 许可证
 ------
 
-Leonix 源码的许可证尚未选定. Documentation/references 中的 Leonardo
-原理图属于 Arduino, 按 CC BY-SA 4.0 分发.
+Leonix 按 GNU 通用公共许可证第 2 版 (仅限该版本) 分发. 全文见 LICENSE,
+每个源文件都在 SPDX-License-Identifier 一行中注明所用许可证.
+
+Documentation/references 中的 Leonardo 原理图属于 Arduino, 按 CC BY-SA 4.0
+分发, 不受 LICENSE 约束.
