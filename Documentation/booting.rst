@@ -87,12 +87,16 @@ StartSketch() 关闭中断, 停止 Timer1 并清零 TIMSK1 与 TCNT1, 清零 IVS
 两条路径交给应用的机器状态并不相同. 上电复位之后外设处于复位值. 8 秒超时
 之后:
 
-  - USB 控制器已被初始化, 只做了断开. USB_Detach() 出自 LUFA, 其源码本文
-    未核对. 如果它只置位 UDCON 的 DETACH, 那么 USBCON 与 UDIEN 中的 USB
-    中断使能位仍然保持置位, 此时在 USB 向量为空的情况下打开中断, CPU 会
-    进入 bad-interrupt 处理程序.
+  - USB 控制器已被初始化, 只做了断开. Caterina 依据 LUFA-111009 编译,
+    该版本的 USB_Detach() 只执行 ``UDCON |= (1 << DETACH)``. USBCON 的
+    USBE、OTGPADE、VBUSTE, UHWCON 的 UVREGE, 以及 UDIEN 的 SUSPE 与
+    EORSTE 都保持置位. 此时在 USB 向量为空的情况下打开中断, 一次 VBUS
+    变化就会使 CPU 进入 bad-interrupt 处理程序.
 
-  - 为 USB 启动的 PLL 仍在运行.
+  - PLLFRQ 已被写为 ``(1 << PLLUSB) | (1 << PDIV3) | (1 << PDIV1)``.
+    PLL 本身只在 USB General 中断检测到 VBUS 时才由 LUFA 启动, 所以
+    超时时 PLL 是否在运行取决于 USB 线是否连接. 独立供电、不接 USB 线时,
+    PLL 未启动.
 
   - LED_SETUP() 已把 DDRC7、DDRB0、DDRD5 设为输出.
 
@@ -101,6 +105,28 @@ StartSketch() 关闭中断, 停止 Timer1 并清零 TIMSK1 与 TCNT1, 清零 IVS
 
 启动代码无法区分这两条路径, 因为它运行时 MCUSR 已经被清零. 所以在第一条
 ``sei`` 之前, 启动代码必须无条件地把 USB 控制器与 PLL 置于已知状态.
+
+USB 关闭序列由以下写入组成, 每一项写入的都是数据手册给出的复位值, 在上电
+路径上重复执行不产生影响::
+
+  USBCON = 1 << FRZCLK;   /* 0x20 */
+  USBINT = 0;
+  UHWCON = 0;
+  PLLCSR = 0;
+  PLLFRQ = 1 << PDIV2;    /* 0x04 */
+
+数据手册 21.6.2 节与 22.2 节说明, 清除 USBE 等同于对 USB 控制器的一次
+硬件复位, UDCON、UDIEN、UDINT 与各端点寄存器随之恢复复位值, DETACH 重新
+置位, 因此这些寄存器不必逐个写入. USBCON 的 OTGPADE 与 VBUSTE、USBINT、
+UHWCON 属于 USB 通用寄存器, PLLCSR 与 PLLFRQ 属于时钟系统, 都不在这次
+复位的范围内, 需要显式写入. 写入期间中断已由 StartSketch() 关闭.
+
+LUFA 的 USB_Disable() 执行的是同一组操作, 只是顺序为先关中断使能、再清
+USBE, 并且不置位 FRZCLK, 也不复原 PLLFRQ. 上面的序列尚未在板子上验证.
+
+8 秒超时还带来一个后果. 按下复位键之后, 只要应用区非空, Caterina 就会等满
+8 秒才进入应用, 是否连接 USB 线都一样. 独立运行时, 每次手动复位都有这
+8 秒的延迟. 不经过这段等待的只有上电复位与不带 boot key 的看门狗复位.
 
 Caterina 还把 SRAM 地址 0x0800 处的一个字用作 boot key. 该处写入 0x7777
 之后再发生看门狗复位, bootloader 会保持运行. Arduino core 在主机以 1200
@@ -142,4 +168,5 @@ PC7 是第一项测试.
   - 从板子上读回熔丝位.
   - 确认 L LED 接在 PC7.
   - 实测按下复位键之后 bootloader 的等待时长.
-  - 查阅 LUFA 的 USB_Detach(), 确定启动代码中最小的 USB 关闭序列.
+  - 在板子上验证第 3 节的 USB 关闭序列: 插着 USB 线按下复位键, 等待超时
+    后打开中断, 确认没有进入 bad-interrupt 处理程序.
