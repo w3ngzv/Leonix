@@ -13,7 +13,13 @@ Leonix 是运行在 Arduino Leonardo (ATmega32U4) 上的内核, 用 C 与 AVR �
 现状
 ----
 
-目前还不能编译. 仓库中现有的是启动代码将要依据的笔记.
+启动代码已在板子上运行, main() 目前只让 PC7 上的 L LED 闪烁, 中断尚未
+打开过.
+
+	make
+	make flash PORT=/dev/cu.usbmodemXXXX
+
+需要先按下复位键, 串口只在 bootloader 等待期间存在.
 
 
 硬件
