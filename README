@@ -1,0 +1,77 @@
+Leonix
+======
+
+Leonix is a kernel for the Arduino Leonardo (ATmega32U4), written in C
+and AVR assembly and built with avr-gcc.  It does not use the Arduino
+core or any of its libraries.
+
+The board is meant to run on its own, powered from the barrel jack or
+VIN, with no host computer attached.  The USB port is used only for
+flashing.
+
+A Chinese version of this file is in README.zh_CN.
+
+
+Status
+------
+
+Nothing builds yet.  The tree currently holds the notes that the start
+code will be written against.
+
+
+Hardware
+--------
+
+  - Arduino Leonardo (A000057): ATmega32U4 at 16 MHz, 32 KiB flash of
+    which 28 KiB is left to the application by the Caterina
+    bootloader, 2.5 KiB SRAM, 1 KiB EEPROM.
+  - Planned console: an HD44780 character LCD behind a PCF8574 I2C
+    expander.
+
+
+Toolchain
+---------
+
+  - avr-gcc (developed with 9.5.0) and binutils for AVR
+  - avrdude, talking AVR109 to the Caterina bootloader
+
+The Caterina bootloader is entered only by pressing the reset button,
+because Leonix has no USB CDC port to receive the 1200 baud reset.
+Documentation/booting.rst, section 5, has the details.
+
+
+Documentation
+-------------
+
+Documentation/booting.rst
+	The machine state the Caterina bootloader leaves behind when it
+	jumps to the application, and what the start code has to undo.
+
+Documentation/references/index.rst
+	Every datasheet and external source the project relies on, with
+	document number and revision.
+
+Only the Leonardo schematic is shipped in the tree, because it is the
+only reference released under a licence that allows redistribution
+(CC BY-SA 4.0).  The other datasheets have to be fetched separately:
+
+	cd Documentation/references
+	curl -L -o ATmega16U4-32U4-datasheet-7766J.pdf \
+	  https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-7766-8-bit-AVR-ATmega16U4-32U4_Datasheet.pdf
+	curl -L -o AVR-InstructionSet-Manual-DS40002198.pdf \
+	  https://ww1.microchip.com/downloads/aemDocuments/documents/MCU08/ProductDocuments/ReferenceManuals/AVR-InstructionSet-Manual-DS40002198.pdf
+	curl -L -o HD44780U-Hitachi.pdf \
+	  https://cdn.sparkfun.com/assets/9/5/f/7/b/HD44780.pdf
+	curl -L -o PCF8574-TI.pdf \
+	  https://www.ti.com/lit/ds/symlink/pcf8574.pdf
+
+These files are not covered by .gitignore.  Add their names to
+.git/info/exclude so they are not committed by accident.
+
+
+Licence
+-------
+
+No licence has been chosen for the Leonix sources yet.  The Leonardo
+schematic in Documentation/references is Arduino's work, distributed
+under CC BY-SA 4.0.
