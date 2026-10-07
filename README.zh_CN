@@ -1,0 +1,68 @@
+Leonix
+======
+
+Leonix 是运行在 Arduino Leonardo (ATmega32U4) 上的内核, 用 C 与 AVR 汇编
+编写, 由 avr-gcc 编译, 不使用 Arduino core 及其任何库.
+
+板子设计为独立运行, 由圆口电源插座或 VIN 供电, 不连接主机. USB 口只用于
+烧录.
+
+英文版见 README.
+
+
+现状
+----
+
+目前还不能编译. 仓库中现有的是启动代码将要依据的笔记.
+
+
+硬件
+----
+
+  - Arduino Leonardo (A000057): ATmega32U4, 16 MHz, Flash 32 KiB, 其中
+    Caterina bootloader 留给应用的是 28 KiB, SRAM 2.5 KiB, EEPROM 1 KiB.
+  - 计划中的控制台: 经 PCF8574 I2C 扩展器连接的 HD44780 字符液晶屏.
+
+
+工具链
+------
+
+  - avr-gcc (开发时使用 9.5.0) 与 AVR 版 binutils
+  - avrdude, 以 AVR109 协议与 Caterina bootloader 通信
+
+Leonix 没有 USB CDC 端口, 无法接收 1200 波特率复位, 所以只能按下复位键
+进入 Caterina bootloader. 详见 Documentation/booting.rst 第 5 节.
+
+
+文档
+----
+
+Documentation/booting.rst
+	Caterina bootloader 跳转到应用时留下的机器状态, 以及启动代码需要
+	复原的部分.
+
+Documentation/references/index.rst
+	本项目依据的全部数据手册与外部资料, 附文档号与修订版.
+
+仓库中只收录 Leonardo 原理图, 它是唯一按允许再分发的许可证
+(CC BY-SA 4.0) 发布的参考资料. 其余数据手册需要另行下载:
+
+	cd Documentation/references
+	curl -L -o ATmega16U4-32U4-datasheet-7766J.pdf \
+	  https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-7766-8-bit-AVR-ATmega16U4-32U4_Datasheet.pdf
+	curl -L -o AVR-InstructionSet-Manual-DS40002198.pdf \
+	  https://ww1.microchip.com/downloads/aemDocuments/documents/MCU08/ProductDocuments/ReferenceManuals/AVR-InstructionSet-Manual-DS40002198.pdf
+	curl -L -o HD44780U-Hitachi.pdf \
+	  https://cdn.sparkfun.com/assets/9/5/f/7/b/HD44780.pdf
+	curl -L -o PCF8574-TI.pdf \
+	  https://www.ti.com/lit/ds/symlink/pcf8574.pdf
+
+.gitignore 不包含这些文件. 请把它们的文件名加入 .git/info/exclude,
+以免误提交.
+
+
+许可证
+------
+
+Leonix 源码的许可证尚未选定. Documentation/references 中的 Leonardo
+原理图属于 Arduino, 按 CC BY-SA 4.0 分发.
