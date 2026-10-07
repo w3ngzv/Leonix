@@ -70,3 +70,10 @@ Caterina bootloader
   出厂烧录的二进制对应哪一修订版无从得知.
 
   https://github.com/arduino/ArduinoCore-avr/tree/master/bootloaders/caterina
+
+LUFA-111009
+  Caterina 的 Makefile 中 LUFA_PATH 指向的版本. 引用的是
+  LUFA/Drivers/USB/Core/AVR8/ 下的 USBController_AVR8.c、
+  USBController_AVR8.h 与 USBInterrupt_AVR8.c.
+
+  https://github.com/abcminiuser/lufa/tree/LUFA-111009
