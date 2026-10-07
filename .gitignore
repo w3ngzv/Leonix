@@ -1,0 +1,11 @@
+*.o
+*.elf
+*.hex
+*.map
+*.lst
+*.log
+build/
+dist/
+.env
+__pycache__/
+node_modules/
