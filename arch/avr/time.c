@@ -5,11 +5,11 @@
  * The timer counts from 0 to TIMER1_TOP inclusive, so one period is
  * TIMER1_TOP + 1 timer clocks: 16 MHz / 64 / 1000 = 250 clocks, 1 ms.
  */
-#include <avr/interrupt.h>
 #include <avr/io.h>
 #include <util/atomic.h>
 
 #include <leonix/jiffies.h>
+#include <leonix/sched.h>
 
 /* int is 16 bits here, and TIMER1_PRESCALE * HZ does not fit in it. */
 #define TIMER1_PRESCALE	64UL
@@ -21,9 +21,14 @@ _Static_assert(TIMER1_TOP <= UINT16_MAX, "OCR1A cannot hold TIMER1_TOP");
 
 static volatile uint32_t jiffies;
 
-ISR(TIMER1_COMPA_vect)
+/*
+ * The Timer1 compare match vector itself is in switch.S, which saves the
+ * interrupted task before calling here.  Interrupts are disabled.
+ */
+void timer_interrupt(void)
 {
 	jiffies++;
+	schedule();
 }
 
 void time_init(void)
