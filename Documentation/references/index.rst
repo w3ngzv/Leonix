@@ -60,6 +60,15 @@ PCF8574-TI.pdf
   本目录的副本与 2026-10-07 从该地址重新下载的文件字节不同, 两者首页
   都是 SCPS068K. 核对时以首页的修订号为准.
 
+UM10204-I2C-NXP.pdf
+  NXP, I2C-bus specification and user manual, UM10204, Rev. 7.0,
+  2021 年 10 月 1 日. 标准模式的时序 (表 11) 与总线停滞时的恢复办法
+  (3.1.16 节) 的依据. 版权页声明 All rights reserved. 本目录的副本于
+  2026-10-09 下载, SHA-256 为
+  dc91f00f65584e06ef36e26c93bf9d91a95fb3c8a1830a9223e53caf678b36af.
+
+  https://www.nxp.com/docs/en/user-guide/UM10204.pdf
+
 架构的历史资料
 --------------
 

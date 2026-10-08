@@ -87,6 +87,8 @@ only reference released under a licence that allows redistribution
 	  https://cdn.sparkfun.com/assets/9/5/f/7/b/HD44780.pdf
 	curl -L -o PCF8574-TI.pdf \
 	  https://www.ti.com/lit/ds/symlink/pcf8574.pdf
+	curl -L -o UM10204-I2C-NXP.pdf \
+	  https://www.nxp.com/docs/en/user-guide/UM10204.pdf
 	curl -L -o AVR-C-Compiler-CoDesign-Myklebust.pdf \
 	  https://ic.unicamp.br/~celio/mc404-2004/Atmel_AVR/C_compiler.pdf
 
