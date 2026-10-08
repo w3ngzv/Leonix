@@ -126,6 +126,11 @@ UHWCON 属于 USB 通用寄存器, PLLCSR 与 PLLFRQ 属于时钟系统, 都不�
 LUFA 的 USB_Disable() 执行的是同一组操作, 只是顺序为先关中断使能、再清
 USBE, 并且不置位 FRZCLK, 也不复原 PLLFRQ. 上面的序列尚未在板子上验证.
 
+这组写入并不要求替换 avr-libc 的 gcrt1.S. avr-libc 为启动过程预留了
+.init0 至 .init9 段, 把上述写入放进 .init3 段, 同样会在中断打开之前执行.
+Leonix 改用 arch/avr/start.S, 是为了让复位向量到 main() 之间的每一条指令
+都出自本项目.
+
 8 秒超时还带来一个后果. 按下复位键之后, 只要应用区非空, Caterina 就会等满
 8 秒才进入应用, 是否连接 USB 线都一样. 独立运行时, 每次手动复位都有这
 8 秒的延迟. 不经过这段等待的只有上电复位与不带 boot key 的看门狗复位.
