@@ -15,8 +15,9 @@ A Chinese version of this file is in README.zh_CN.
 Status
 ------
 
-The start code runs on the board, and main() only blinks the L LED on
-PC7.  Interrupts are never enabled yet.
+A 1 ms Timer1 tick drives a preemptive round-robin scheduler.  main()
+starts two tasks that blink the L and TX LEDs at different rates, and
+both run on the board.
 
 	make
 	make flash PORT=/dev/cu.usbmodemXXXX
