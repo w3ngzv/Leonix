@@ -9,6 +9,7 @@
 void time_init(void);
 void timer_interrupt(void);
 uint32_t get_jiffies(void);
+void mdelay(uint16_t ms);
 
 /* True once jiffies has reached or passed @deadline, across wraparound. */
 static inline int time_after_eq(uint32_t now, uint32_t deadline)
