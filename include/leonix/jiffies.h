@@ -7,6 +7,7 @@
 #define HZ	1000
 
 void time_init(void);
+void timer_interrupt(void);
 uint32_t get_jiffies(void);
 
 /* True once jiffies has reached or passed @deadline, across wraparound. */
