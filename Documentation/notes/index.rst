@@ -15,4 +15,5 @@
    :maxdepth: 1
 
    boot
+   tick
    scheduler
