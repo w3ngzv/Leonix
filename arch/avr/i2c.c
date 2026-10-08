@@ -33,13 +33,28 @@ void i2c_init(void)
 	TWCR = 1 << TWEN;
 }
 
+/*
+ * True once @deadline has passed and @mask in TWCR still reads @busy.
+ *
+ * The clock is sampled before the register.  The task can be switched
+ * out for two ticks or more between any two instructions, while the
+ * TWI hardware keeps running; reading TWCR last means a transfer that
+ * finished during that gap is seen as finished, not as a timeout.
+ */
+static int i2c_timed_out(uint32_t deadline, uint8_t mask, uint8_t busy)
+{
+	int expired = time_after_eq(get_jiffies(), deadline);
+
+	return expired && (TWCR & mask) == busy;
+}
+
 /* Returns the status code with the prescaler bits masked, or -1. */
 static int i2c_wait(void)
 {
 	uint32_t deadline = get_jiffies() + I2C_TIMEOUT_MS + 1;
 
 	while (!(TWCR & (1 << TWINT)))
-		if (time_after_eq(get_jiffies(), deadline))
+		if (i2c_timed_out(deadline, 1 << TWINT, 0))
 			return -1;
 	return TW_STATUS;
 }
@@ -61,7 +76,7 @@ static void i2c_stop(void)
 
 	TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN);
 	while (TWCR & (1 << TWSTO))
-		if (time_after_eq(get_jiffies(), deadline)) {
+		if (i2c_timed_out(deadline, 1 << TWSTO, 1 << TWSTO)) {
 			i2c_reset();
 			return;
 		}
