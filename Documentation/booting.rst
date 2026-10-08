@@ -124,7 +124,8 @@ UHWCON 属于 USB 通用寄存器, PLLCSR 与 PLLFRQ 属于时钟系统, 都不�
 复位的范围内, 需要显式写入. 写入期间中断已由 StartSketch() 关闭.
 
 LUFA 的 USB_Disable() 执行的是同一组操作, 只是顺序为先关中断使能、再清
-USBE, 并且不置位 FRZCLK, 也不复原 PLLFRQ. 上面的序列尚未在板子上验证.
+USBE, 并且不置位 FRZCLK, 也不复原 PLLFRQ. 上面的序列已于 2026-10-08 在
+复位路径上得到确认, 其中 VBUSTE 一项尚未检验, 见第 6 节.
 
 这组写入并不要求替换 avr-libc 的 gcrt1.S. avr-libc 为启动过程预留了
 .init0 至 .init9 段, 把上述写入放进 .init3 段, 同样会在中断打开之前执行.
