@@ -15,8 +15,14 @@ A Chinese version of this file is in README.zh_CN.
 Status
 ------
 
-Nothing builds yet.  The tree currently holds the notes that the start
-code will be written against.
+The start code runs on the board, and main() only blinks the L LED on
+PC7.  Interrupts are never enabled yet.
+
+	make
+	make flash PORT=/dev/cu.usbmodemXXXX
+
+Press the reset button first; the port only exists while the bootloader
+is waiting.
 
 
 Hardware
@@ -72,6 +78,9 @@ These files are not covered by .gitignore.  Add their names to
 Licence
 -------
 
-No licence has been chosen for the Leonix sources yet.  The Leonardo
-schematic in Documentation/references is Arduino's work, distributed
-under CC BY-SA 4.0.
+Leonix is distributed under the GNU General Public License, version 2
+only.  The full text is in LICENSE, and every source file names its
+licence in an SPDX-License-Identifier line.
+
+The Leonardo schematic in Documentation/references is Arduino's work,
+distributed under CC BY-SA 4.0, and is not covered by LICENSE.
