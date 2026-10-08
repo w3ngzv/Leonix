@@ -6,11 +6,14 @@
  * on jiffies for its timeout, so it must run with the tick going, that
  * is from a task and not from main() before sched_start().
  *
- * SDA is PD1 and SCL is PD0, D2 and D3 on the Leonardo header.  The
- * internal pull-ups stay off: the usual PCF8574 LCD backpacks carry
- * their own.
+ * SDA is PD1 and SCL is PD0, D2 and D3 on the Leonardo header.
+ *
+ * The bus can be unplugged and plugged back while running.  A failed
+ * transfer ends in i2c_reset(), which also frees a slave left holding
+ * SDA low, so the next i2c_write() starts from an idle bus.
  */
 #include <avr/io.h>
+#include <util/delay.h>
 #include <util/twi.h>
 
 #include <leonix/i2c.h>
@@ -23,11 +26,32 @@
 /* One byte takes 90 us at 100 kHz; anything near 2 ms means a stuck bus. */
 #define I2C_TIMEOUT_MS	2
 
+/*
+ * UM10204 3.1.16: a slave stuck holding SDA low lets go within nine
+ * clocks.  Each half clock is 5 us, above the 4.7 us tLOW and 4.0 us
+ * tHIGH of standard mode (UM10204 table 11).
+ */
+#define I2C_CLEAR_CLOCKS	9
+#define I2C_HALF_CLOCK_US	5
+
 _Static_assert(I2C_TWBR >= 10, "datasheet 20.5.2: TWBR below 10 corrupts master output");
 _Static_assert(I2C_TWBR <= 255, "TWBR is 8 bits, needs a TWI prescaler");
 
+/*
+ * The internal pull-ups (20 to 50 kOhm, datasheet table 29-1) are weak
+ * next to the backpack's own, but they keep both lines high while the
+ * backpack is unplugged.  A floating bus can read as busy and leave
+ * every START to time out; a pulled-up one answers with a fast NACK.
+ *
+ * Every PORTD and DDRD change in this file touches a single bit, which
+ * avr-gcc emits as one sbi or cbi.  blink_tx writes PIND on the same
+ * port from another task, and an in/ori/out sequence here could be
+ * switched out halfway and write back a stale PORTD5.
+ */
 void i2c_init(void)
 {
+	PORTD |= 1 << PORTD0;
+	PORTD |= 1 << PORTD1;
 	TWSR = 0;			/* prescaler 1 */
 	TWBR = I2C_TWBR;
 	TWCR = 1 << TWEN;
@@ -59,10 +83,65 @@ static int i2c_wait(void)
 	return TW_STATUS;
 }
 
-/* Disabling TWEN drops whatever the hardware was doing on the bus. */
+/*
+ * Open-drain by hand while the TWI is off: drive low with PORT 0 and
+ * DDR 1, release with DDR 0 and PORT 1.  The order never passes through
+ * DDR 1 with PORT 1, which would drive the line high against a slave.
+ */
+static void scl_low(void)
+{
+	PORTD &= ~(1 << PORTD0);
+	DDRD |= 1 << DDD0;
+}
+
+static void scl_release(void)
+{
+	DDRD &= ~(1 << DDD0);
+	PORTD |= 1 << PORTD0;
+}
+
+static void sda_low(void)
+{
+	PORTD &= ~(1 << PORTD1);
+	DDRD |= 1 << DDD1;
+}
+
+static void sda_release(void)
+{
+	DDRD &= ~(1 << DDD1);
+	PORTD |= 1 << PORTD1;
+}
+
+/*
+ * Disabling TWEN drops whatever the hardware was doing and hands the
+ * pins back to PORTD.  If a slave still holds SDA, clock it out, then
+ * put a STOP on the bus so every slave returns to idle.
+ *
+ * Being switched out between edges only stretches a half clock, which
+ * standard mode allows; it has no lower clock limit.
+ */
 static void i2c_reset(void)
 {
+	uint8_t i;
+
 	TWCR = 0;
+
+	for (i = 0; i < I2C_CLEAR_CLOCKS && !(PIND & (1 << PIND1)); i++) {
+		scl_low();
+		_delay_us(I2C_HALF_CLOCK_US);
+		scl_release();
+		_delay_us(I2C_HALF_CLOCK_US);
+	}
+
+	/* STOP: SDA rises while SCL is high. */
+	scl_low();
+	sda_low();
+	_delay_us(I2C_HALF_CLOCK_US);
+	scl_release();
+	_delay_us(I2C_HALF_CLOCK_US);
+	sda_release();
+	_delay_us(I2C_HALF_CLOCK_US);
+
 	TWCR = 1 << TWEN;
 }
 
