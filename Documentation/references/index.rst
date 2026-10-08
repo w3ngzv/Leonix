@@ -60,6 +60,32 @@ PCF8574-TI.pdf
   本目录的副本与 2026-10-07 从该地址重新下载的文件字节不同, 两者首页
   都是 SCPS068K. 核对时以首页的修订号为准.
 
+架构的历史资料
+--------------
+
+notes/avr.rst 讨论 AVR 为何如此设计, 依据下列资料. 这些资料都没有声明允许
+再分发, 处理方式与上面的数据手册相同.
+
+AVR-C-Compiler-CoDesign-Myklebust.pdf
+  Gaute Myklebust, The AVR Microcontroller and C Compiler Co-Design,
+  ATMEL Development Center, Trondheim. 6 页, 未注明日期. PDF 元数据的
+  生成时间为 1997-12-17, 文中引用的最新文献是 1996 年 5 月的 AVR 数据手册.
+  记录了指令集定型之前, 应 IAR Systems 的编译器开发者的意见所做的修改.
+
+  Atmel 原地址 www.atmel.com/dyn/resources/prod_documents/compiler.pdf
+  已失效. 本目录的副本 2026-10-08 取自 Unicamp 的课程镜像, SHA-256 为
+  9780e7b468abcc58b65bcdcb75ef3e22dcf2ad2a24a3973fa9dca70a7e4f86d2:
+
+  https://ic.unicamp.br/~celio/mc404-2004/Atmel_AVR/C_compiler.pdf
+
+Atmel-blog-2014-08-21-Wollan.html, Atmel-blog-2014-08-25-Wollan.html
+  Paul Rako, Atmel 官方博客 Bits & Pieces, 2014-08-21 与 2014-08-25 两篇.
+  内容是作者对 Vegard Wollan 访谈视频的转述, 页面中没有 Wollan 的直接
+  引语, 视频本身未核对. 本目录的副本于 2026-10-08 保存.
+
+  https://atmelcorporation.wordpress.com/2014/08/21/vegard-wollan-on-inventing-the-avr-chip/
+  https://atmelcorporation.wordpress.com/2014/08/25/more-avr-history-with-vegard-wollan/
+
 未收录的源码
 ------------
 
