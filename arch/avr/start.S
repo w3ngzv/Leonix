@@ -44,7 +44,18 @@ __reset:
 	ldi	r24, 1 << PDIV2
 	out	_SFR_IO_ADDR(PLLFRQ), r24
 
+	/*
+	 * avr-gcc makes every object with .data refer to __do_copy_data,
+	 * and every object with .bss to __do_clear_bss, expecting the
+	 * libgcc versions in .init4.  Nothing jumps into .init4 under
+	 * -nostartfiles, so those copies would sit in flash unused.
+	 * Giving the two loops below the same names satisfies the
+	 * references and keeps libgcc's out of the image.
+	 */
+
 	/* Copy .data from flash.  The image is below 64 KiB, so lpm reaches it. */
+	.global	__do_copy_data
+__do_copy_data:
 	ldi	r26, lo8(__data_start)
 	ldi	r27, hi8(__data_start)
 	ldi	r30, lo8(__data_load_start)
@@ -58,6 +69,8 @@ __reset:
 	brne	1b
 
 	/* Zero .bss. */
+	.global	__do_clear_bss
+__do_clear_bss:
 	ldi	r26, lo8(__bss_start)
 	ldi	r27, hi8(__bss_start)
 	rjmp	4f
