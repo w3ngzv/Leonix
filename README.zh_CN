@@ -13,8 +13,8 @@ Leonix 是运行在 Arduino Leonardo (ATmega32U4) 上的内核, 用 C 与 AVR �
 现状
 ----
 
-启动代码已在板子上运行, main() 目前只让 PC7 上的 L LED 闪烁, 中断尚未
-打开过.
+Timer1 产生的 1 ms 节拍驱动抢占式轮转调度器. main() 建立两个任务, 分别以
+不同频率让 L 与 TX 两个 LED 闪烁, 均已在板子上运行.
 
 	make
 	make flash PORT=/dev/cu.usbmodemXXXX
