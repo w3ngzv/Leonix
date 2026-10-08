@@ -15,7 +15,7 @@
 构建不需要 Documentation/references 中的数据手册.
 
 开发在 macOS 上进行, 使用 avr-gcc 9.5.0. 2026-10-09 又在下列 Linux 发行版的
-容器中, 用各自软件源提供的工具链完成了构建, 所用源码自 d4fcdd3 以来未变. 容器中只验证
+容器中, 用各自软件源提供的工具链构建了提交 0eb3ed3 的源码. 容器中只验证
 编译, 生成的映像没有烧录到板子上:
 
   =================  ===========  =========  ============
@@ -132,11 +132,11 @@ leonix.map
 ``make size`` 的输出示例 (avr-gcc 9.5.0)::
 
      text    data     bss     dec     hex filename
-     1106       2     272    1380     564 leonix.elf
+     1068       2     272    1342     53e leonix.elf
 
 读法如下:
 
-- 占用的 Flash 为 text 加 data, 即 1108 字节. ``.data`` 的初值同样存放在
+- 占用的 Flash 为 text 加 data, 即 1070 字节. ``.data`` 的初值同样存放在
   Flash 中, 由启动代码复制到 SRAM.
 - 静态占用的 SRAM 为 data 加 bss, 即 274 字节. SRAM 共 2560 字节, 其余部分
   留给 main() 使用的启动栈.
