@@ -50,9 +50,18 @@ Documentation/booting.rst, section 5, has the details.
 Documentation
 -------------
 
+Documentation/building.rst
+	Installing the toolchain, building the image and flashing it
+	through the Caterina bootloader.
+
 Documentation/booting.rst
 	The machine state the Caterina bootloader leaves behind when it
 	jumps to the application, and what the start code has to undo.
+
+Documentation/notes/index.rst
+	Design notes on the start code, the system tick and the
+	scheduler, written for readers new to kernel work.  Read them in
+	the order listed there.
 
 Documentation/references/index.rst
 	Every datasheet and external source the project relies on, with

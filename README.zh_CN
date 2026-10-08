@@ -43,9 +43,16 @@ Leonix 没有 USB CDC 端口, 无法接收 1200 波特率复位, 所以只能按
 文档
 ----
 
+Documentation/building.rst
+	工具链的安装, 映像的构建, 以及经由 Caterina bootloader 烧录的步骤.
+
 Documentation/booting.rst
 	Caterina bootloader 跳转到应用时留下的机器状态, 以及启动代码需要
 	复原的部分.
+
+Documentation/notes/index.rst
+	启动代码、系统节拍与调度器的设计思考, 面向初次接触内核开发的读者.
+	按其中列出的顺序阅读.
 
 Documentation/references/index.rst
 	本项目依据的全部数据手册与外部资料, 附文档号与修订版.
