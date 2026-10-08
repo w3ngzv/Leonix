@@ -15,5 +15,6 @@
    :maxdepth: 1
 
    boot
+   gpio
    tick
    scheduler
