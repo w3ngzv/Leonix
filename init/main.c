@@ -1,20 +1,30 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#include <avr/interrupt.h>
 #include <avr/io.h>
-#include <util/delay.h>
 
-#define BLINK_HALF_PERIOD_MS	500
+#include <leonix/jiffies.h>
 
 /*
- * For now main() only blinks the L LED on PC7.  It is the first test on
- * real hardware: it confirms the LED pin, and the time from pressing
- * reset to the first blink is the Caterina timeout.
+ * Kept as a writable global so it lands in .data and the copy loop in
+ * start.S has something to copy.  A wrong copy shows up as a wrong
+ * blink rate.
  */
+uint16_t blink_half_period = HZ / 2;
+
 int main(void)
 {
+	uint32_t next_toggle;
+
 	DDRC |= 1 << DDC7;
 
+	time_init();
+	sei();
+
+	next_toggle = get_jiffies() + blink_half_period;
 	for (;;) {
-		PINC = 1 << PINC7;
-		_delay_ms(BLINK_HALF_PERIOD_MS);
+		if (time_after_eq(get_jiffies(), next_toggle)) {
+			PINC = 1 << PINC7;
+			next_toggle += blink_half_period;
+		}
 	}
 }
