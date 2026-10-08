@@ -6,14 +6,14 @@ TARGET   := leonix
 # Caterina occupies the top 4 KiB of the 32 KiB flash.
 APP_FLASH_SIZE := 28672
 
-OBJS := arch/avr/start.o init/main.o
+OBJS := arch/avr/start.o arch/avr/time.o init/main.o
 
 CC      := avr-gcc
 OBJCOPY := avr-objcopy
 OBJDUMP := avr-objdump
 SIZE    := avr-size
 
-CPPFLAGS := -DF_CPU=$(F_CPU)
+CPPFLAGS := -DF_CPU=$(F_CPU) -Iinclude
 CFLAGS   := -mmcu=$(MCU) -std=c11 -Os -g -Wall -Wextra -Werror
 ASFLAGS  := -mmcu=$(MCU) -g -Wall -Werror
 LDFLAGS  := -mmcu=$(MCU) -nostartfiles \
