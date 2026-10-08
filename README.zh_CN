@@ -36,6 +36,11 @@ Timer1 产生的 1 ms 节拍驱动抢占式轮转调度器. main() 建立两个�
   - avr-gcc (开发时使用 9.5.0) 与 AVR 版 binutils
   - avrdude, 以 AVR109 协议与 Caterina bootloader 通信
 
+开发在 macOS 上进行. Debian、Ubuntu、Fedora 与 Arch Linux 软件源中的工具链
+(avr-gcc 5.4.0 至 16.2.0) 也能完成构建, 但只有 macOS 构建的映像在板子上
+运行过. Windows 尚未测试. 各系统的安装命令与串口名见
+Documentation/building.rst.
+
 Leonix 没有 USB CDC 端口, 无法接收 1200 波特率复位, 所以只能按下复位键
 进入 Caterina bootloader. 详见 Documentation/booting.rst 第 5 节.
 
@@ -43,9 +48,16 @@ Leonix 没有 USB CDC 端口, 无法接收 1200 波特率复位, 所以只能按
 文档
 ----
 
+Documentation/building.rst
+	工具链的安装, 映像的构建, 以及经由 Caterina bootloader 烧录的步骤.
+
 Documentation/booting.rst
 	Caterina bootloader 跳转到应用时留下的机器状态, 以及启动代码需要
 	复原的部分.
+
+Documentation/notes/index.rst
+	AVR 架构本身、启动代码、引脚、系统节拍与调度器的设计思考, 面向初次接触内核开发的读者.
+	按其中列出的顺序阅读.
 
 Documentation/references/index.rst
 	本项目依据的全部数据手册与外部资料, 附文档号与修订版.
@@ -62,6 +74,8 @@ Documentation/references/index.rst
 	  https://cdn.sparkfun.com/assets/9/5/f/7/b/HD44780.pdf
 	curl -L -o PCF8574-TI.pdf \
 	  https://www.ti.com/lit/ds/symlink/pcf8574.pdf
+	curl -L -o AVR-C-Compiler-CoDesign-Myklebust.pdf \
+	  https://ic.unicamp.br/~celio/mc404-2004/Atmel_AVR/C_compiler.pdf
 
 .gitignore 不包含这些文件. 请把它们的文件名加入 .git/info/exclude,
 以免误提交.
