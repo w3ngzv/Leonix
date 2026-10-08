@@ -15,8 +15,14 @@ A Chinese version of this file is in README.zh_CN.
 Status
 ------
 
-Nothing builds yet.  The tree currently holds the notes that the start
-code will be written against.
+The start code runs on the board, and main() only blinks the L LED on
+PC7.  Interrupts are never enabled yet.
+
+	make
+	make flash PORT=/dev/cu.usbmodemXXXX
+
+Press the reset button first; the port only exists while the bootloader
+is waiting.
 
 
 Hardware
