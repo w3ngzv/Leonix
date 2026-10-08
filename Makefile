@@ -6,7 +6,7 @@ TARGET   := leonix
 # Caterina occupies the top 4 KiB of the 32 KiB flash.
 APP_FLASH_SIZE := 28672
 
-OBJS := arch/avr/start.o arch/avr/time.o init/main.o
+OBJS := arch/avr/start.o arch/avr/switch.o arch/avr/time.o kernel/sched.o init/main.o
 
 CC      := avr-gcc
 OBJCOPY := avr-objcopy
