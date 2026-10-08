@@ -11,31 +11,93 @@
 工具链
 ======
 
-开发使用的版本如下, 均由 macOS 上的 Homebrew 安装:
+构建需要 avr-gcc、AVR 版 binutils、avr-libc 与 GNU make, 烧录需要 avrdude.
+构建不需要 Documentation/references 中的数据手册.
 
-  ============  =======  ==============================
-  软件包        版本     来源
-  ============  =======  ==============================
-  avr-gcc@9     9.5.0    osx-cross/avr
-  avr-binutils  2.46.0   osx-cross/avr, avr-gcc 的依赖
-  avrdude       8.3      Homebrew
-  ============  =======  ==============================
+开发在 macOS 上进行, 使用 avr-gcc 9.5.0. 2026-10-09 又在下列 Linux 发行版的
+容器中, 用各自软件源提供的工具链完成了构建, 所用源码自 d4fcdd3 以来未变. 容器中只验证
+编译, 生成的映像没有烧录到板子上:
 
-avr-libc 的头文件随 avr-gcc@9 一同安装. 其他平台与其他版本尚未测试.
+  =================  ===========  =========  ============
+  平台               avr-gcc      avrdude    映像 (字节)
+  =================  ===========  =========  ============
+  macOS, Homebrew    9.5.0        8.3        1108
+  Ubuntu 22.04       5.4.0        6.3        1032
+  Debian 12          5.4.0        7.1        1032
+  Ubuntu 24.04       7.3.0        7.1        1024
+  Debian 13          14.2.0       7.1        998
+  Fedora 44          15.2.0       8.0        1000
+  Arch Linux         16.1.0       8.3        1010
+  Debian sid         16.2.0       7.1        1010
+  =================  ===========  =========  ============
 
-安装::
+映像大小为 ``make size`` 中 text 与 data 之和. 只有 macOS 一行的映像在板子上
+运行过. 不同版本的编译器生成的代码不同, notes/scheduler.rst 中的周期数只对
+avr-gcc 9.5.0 成立.
+
+Windows 尚未测试, 下文 Windows 一节依据各工具的文档编写.
+
+
+macOS
+-----
+
+用 Homebrew 安装::
 
   brew tap osx-cross/avr
   brew install avr-gcc@9 avrdude
 
-确认安装::
+avr-binutils 与 avr-libc 作为 avr-gcc@9 的依赖一同安装. 确认版本::
 
   avr-gcc --version
   avrdude -v
 
-第一行应显示 9.5.0. 第二条命令以 Avrdude version 8.3 开头.
+第一条命令的首行应显示 9.5.0.
 
-构建不需要 Documentation/references 中的数据手册.
+
+Linux
+-----
+
+各发行版的安装命令:
+
+Debian, Ubuntu::
+
+  sudo apt install gcc-avr binutils-avr avr-libc avrdude make
+
+Fedora::
+
+  sudo dnf install avr-gcc avr-binutils avr-libc avrdude make
+
+Arch Linux::
+
+  sudo pacman -S avr-gcc avr-binutils avr-libc avrdude make
+
+串口设备属于 dialout 组, Arch Linux 上属于 uucp 组, 普通用户需要加入该组
+才能烧录. Debian、Ubuntu 与 Fedora 上运行::
+
+  sudo usermod -aG dialout $USER
+
+Arch Linux 上把 dialout 换成 uucp. 重新登录之后生效, 用 ``id`` 确认组已加入.
+
+
+Windows
+-------
+
+推荐使用 MSYS2. Makefile 中的 ``test`` 与 ``rm`` 需要 POSIX shell, MSYS2
+提供了这一环境. 下列步骤未经实测.
+
+1. 从 https://www.msys2.org 安装 MSYS2.
+2. 打开开始菜单中的 MSYS2 UCRT64 终端.
+3. 安装工具链::
+
+     pacman -S make mingw-w64-ucrt-x86_64-avr-gcc mingw-w64-ucrt-x86_64-avr-binutils mingw-w64-ucrt-x86_64-avr-libc mingw-w64-ucrt-x86_64-avrdude
+
+本文写作时 MSYS2 UCRT64 提供的 avr-gcc 为 16.1.0, avrdude 为 8.0. 同版本的
+avr-gcc 在 Arch Linux 容器中构建成功.
+
+另一种做法是在 WSL 2 中按 Linux 一节构建. WSL 2 本身不能访问 USB 设备,
+Microsoft 的文档要求另装 usbipd-win 才能把设备交给 WSL. 板子每次按复位键
+都会重新枚举, 能否在 8 秒内完成转接尚未测试. 在 WSL 中构建、在 Windows
+一侧用 MSYS2 的 avrdude 烧录, 可以避开这一问题.
 
 
 构建
@@ -67,7 +129,7 @@ leonix.map
 ``make clean``
   删除全部生成的文件.
 
-``make size`` 的输出示例 (提交 de4c9d8)::
+``make size`` 的输出示例 (avr-gcc 9.5.0)::
 
      text    data     bss     dec     hex filename
      1106       2     272    1380     564 leonix.elf
@@ -90,25 +152,44 @@ Leonix 没有 USB 串口. 板子只在 Caterina bootloader 等待期间以串口
 
 1. 用 USB 线连接板子与主机.
 2. 按一下复位键. 板上 LED 开始呈呼吸状亮灭, 表示 bootloader 正在等待.
-3. 在 8 秒内运行::
+3. 在 8 秒内运行下列命令之一, 视操作系统而定::
 
-     make flash PORT=$(ls /dev/cu.usbmodem* | head -n 1)
+     make flash PORT=$(ls /dev/cu.usbmodem* | head -n 1)     macOS
+     make flash PORT=$(ls /dev/ttyACM* | head -n 1)          Linux
+     make flash PORT=COM5                                    Windows
 
    avrdude 报告写入与校验的进度. 写入完成之后应用开始运行.
 
-端口名在同一台主机上通常保持不变. 第一次烧录时, 先按复位键, 再运行
-``ls /dev/cu.usbmodem*`` 查看端口名, 之后可以直接写入 ``PORT=``.
+端口名在同一台主机上通常保持不变. 第一次烧录时, 先按复位键, 再查看端口名,
+之后可以直接写入 ``PORT=``:
+
+macOS
+  ``ls /dev/cu.usbmodem*``.
+
+Linux
+  ``ls /dev/ttyACM*``. 机器上没有其他 USB 串口设备时, 端口通常是
+  /dev/ttyACM0.
+
+Windows
+  打开设备管理器, 展开"端口 (COM 和 LPT)", 按下复位键之后新出现的一项
+  即为板子, 括号中的 COM 号就是端口名. 若该设备没有出现在这一类别下,
+  而是带有黄色感叹号, 说明系统没有为该设备加载串口驱动. 安装 Arduino IDE
+  会一并安装 Leonardo 的驱动. 这一情形尚未在 Windows 上核实.
 
 
 常见错误
 ========
 
 ``usage: make flash PORT=/dev/cu.usbmodemXXXX``
-  没有提供 PORT. 第 3 步中的 ``ls`` 没有找到端口时同样出现这条信息, zsh 在这条信息之前还会输出 ``no matches found``. 原因是复位键没有按下, 或 8 秒的
+  没有提供 PORT. 第 3 步中的 ``ls`` 没有找到端口时同样出现这条信息, macOS
+  默认的 zsh 在这条信息之前还会输出 ``no matches found``. 原因是复位键没有按下, 或 8 秒的
   等待已经结束. 重新按复位键, 再运行一次.
 
 avrdude 报告无法打开端口
   等待已经结束, 串口随之消失. 重新按复位键, 再运行一次.
+
+Linux 上 avrdude 报告 Permission denied
+  当前用户不在串口设备所属的组中, 见上文 Linux 一节.
 
 ``region `text' overflowed``
   映像超过 28672 字节. 运行 ``make size`` 查看各段大小, 再到 leonix.map
