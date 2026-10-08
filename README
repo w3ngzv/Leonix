@@ -42,6 +42,12 @@ Toolchain
   - avr-gcc (developed with 9.5.0) and binutils for AVR
   - avrdude, talking AVR109 to the Caterina bootloader
 
+Development is on macOS.  The tree also builds with the toolchains
+packaged by Debian, Ubuntu, Fedora and Arch Linux, avr-gcc 5.4.0 to
+16.2.0; only the macOS image has been run on the board.  Windows is
+untested.  Documentation/building.rst has the install commands and
+the serial port name for each system.
+
 The Caterina bootloader is entered only by pressing the reset button,
 because Leonix has no USB CDC port to receive the 1200 baud reset.
 Documentation/booting.rst, section 5, has the details.

@@ -36,6 +36,11 @@ Timer1 产生的 1 ms 节拍驱动抢占式轮转调度器. main() 建立两个�
   - avr-gcc (开发时使用 9.5.0) 与 AVR 版 binutils
   - avrdude, 以 AVR109 协议与 Caterina bootloader 通信
 
+开发在 macOS 上进行. Debian、Ubuntu、Fedora 与 Arch Linux 软件源中的工具链
+(avr-gcc 5.4.0 至 16.2.0) 也能完成构建, 但只有 macOS 构建的映像在板子上
+运行过. Windows 尚未测试. 各系统的安装命令与串口名见
+Documentation/building.rst.
+
 Leonix 没有 USB CDC 端口, 无法接收 1200 波特率复位, 所以只能按下复位键
 进入 Caterina bootloader. 详见 Documentation/booting.rst 第 5 节.
 
