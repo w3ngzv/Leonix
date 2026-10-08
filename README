@@ -59,8 +59,9 @@ Documentation/booting.rst
 	jumps to the application, and what the start code has to undo.
 
 Documentation/notes/index.rst
-	Design notes on the start code, the system tick and the
-	scheduler, written for readers new to kernel work.  Read them in
+	Design notes on the AVR architecture itself, the start code, the
+	I/O pins, the system tick and the scheduler, written for readers
+	new to kernel work.  Read them in
 	the order listed there.
 
 Documentation/references/index.rst
@@ -80,6 +81,8 @@ only reference released under a licence that allows redistribution
 	  https://cdn.sparkfun.com/assets/9/5/f/7/b/HD44780.pdf
 	curl -L -o PCF8574-TI.pdf \
 	  https://www.ti.com/lit/ds/symlink/pcf8574.pdf
+	curl -L -o AVR-C-Compiler-CoDesign-Myklebust.pdf \
+	  https://ic.unicamp.br/~celio/mc404-2004/Atmel_AVR/C_compiler.pdf
 
 These files are not covered by .gitignore.  Add their names to
 .git/info/exclude so they are not committed by accident.

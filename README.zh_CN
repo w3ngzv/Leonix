@@ -51,7 +51,7 @@ Documentation/booting.rst
 	复原的部分.
 
 Documentation/notes/index.rst
-	启动代码、系统节拍与调度器的设计思考, 面向初次接触内核开发的读者.
+	AVR 架构本身、启动代码、引脚、系统节拍与调度器的设计思考, 面向初次接触内核开发的读者.
 	按其中列出的顺序阅读.
 
 Documentation/references/index.rst
@@ -69,6 +69,8 @@ Documentation/references/index.rst
 	  https://cdn.sparkfun.com/assets/9/5/f/7/b/HD44780.pdf
 	curl -L -o PCF8574-TI.pdf \
 	  https://www.ti.com/lit/ds/symlink/pcf8574.pdf
+	curl -L -o AVR-C-Compiler-CoDesign-Myklebust.pdf \
+	  https://ic.unicamp.br/~celio/mc404-2004/Atmel_AVR/C_compiler.pdf
 
 .gitignore 不包含这些文件. 请把它们的文件名加入 .git/info/exclude,
 以免误提交.
