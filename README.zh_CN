@@ -13,8 +13,12 @@ Leonix 是运行在 Arduino Leonardo (ATmega32U4) 上的内核, 用 C 与 AVR �
 现状
 ----
 
-Timer1 产生的 1 ms 节拍驱动抢占式轮转调度器. main() 建立两个任务, 分别以
-不同频率让 L 与 TX 两个 LED 闪烁, 均已在板子上运行.
+Timer1 产生的 1 ms 节拍驱动抢占式轮转调度器. 任务以睡眠代替忙等, 没有任务
+可运行时, 空闲任务使 CPU 进入 Idle 模式. main() 建立三个任务: 两个分别让
+L 与 TX 两个 LED 闪烁, 第三个经 PCF8574 I2C 背板驱动 HD44780 液晶屏, 显示
+运行时间与 CPU 的空闲程度, 背板拔下再插回后重新初始化液晶屏.
+
+以上功能均已在板子上运行. 液晶屏每秒刷新一次时, 显示的空闲比例约为 98%.
 
 	make
 	make flash PORT=/dev/cu.usbmodemXXXX
@@ -27,7 +31,8 @@ Timer1 产生的 1 ms 节拍驱动抢占式轮转调度器. main() 建立两个�
 
   - Arduino Leonardo (A000057): ATmega32U4, 16 MHz, Flash 32 KiB, 其中
     Caterina bootloader 留给应用的是 28 KiB, SRAM 2.5 KiB, EEPROM 1 KiB.
-  - 计划中的控制台: 经 PCF8574 I2C 扩展器连接的 HD44780 字符液晶屏.
+  - 控制台: 经 PCF8574 I2C 背板连接的 HD44780 16x2 字符液晶屏, SDA 接 D2,
+    SCL 接 D3.
 
 
 工具链
@@ -56,7 +61,7 @@ Documentation/booting.rst
 	复原的部分.
 
 Documentation/notes/index.rst
-	AVR 架构本身、启动代码、引脚、系统节拍与调度器的设计思考, 面向初次接触内核开发的读者.
+	AVR 架构本身、启动代码、引脚、系统节拍、调度器与 I2C 液晶屏的设计思考, 面向初次接触内核开发的读者.
 	按其中列出的顺序阅读.
 
 Documentation/references/index.rst
