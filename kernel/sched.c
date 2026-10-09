@@ -12,10 +12,19 @@
 #include <util/atomic.h>
 
 #include <leonix/jiffies.h>
+#include <leonix/panic.h>
 #include <leonix/sched.h>
 
 /* Number of registers r1..r31 in the frame below r0 and SREG. */
 #define NR_SAVED_GPRS	31
+
+/*
+ * Written at the lowest two bytes of every stack.  The stack grows down,
+ * so these are the last bytes an overflow reaches before it leaves the
+ * stack.  The value is the top half of Linux's STACK_END_MAGIC.
+ */
+#define STACK_CANARY_LO	0xac
+#define STACK_CANARY_HI	0x57
 
 #define IDLE_STACK_SIZE	72
 
@@ -74,7 +83,11 @@ static void task_init(struct task *t, void (*entry)(void),
 	for (i = 0; i < NR_SAVED_GPRS; i++)
 		*sp-- = 0;		/* r1..r31, r1 must be zero for C */
 
+	stack[0] = STACK_CANARY_LO;
+	stack[1] = STACK_CANARY_HI;
+
 	t->sp = sp;
+	t->stack = stack;
 	t->state = TASK_RUNNABLE;
 }
 
@@ -87,6 +100,17 @@ int task_create(void (*entry)(void), uint8_t *stack, uint16_t size)
 	task_init(&tasks[nr_tasks], entry, stack, size);
 	nr_tasks++;
 	return 0;
+}
+
+/*
+ * The outgoing task has just been saved on its own stack, so this is
+ * the deepest that stack has been since the last check, give or take
+ * what the task used and released in between.
+ */
+static void check_stack(const struct task *t)
+{
+	if (t->stack[0] != STACK_CANARY_LO || t->stack[1] != STACK_CANARY_HI)
+		panic();
 }
 
 /*
@@ -103,6 +127,8 @@ void schedule(void)
 	struct task *t;
 	uint8_t i = current_index;
 	uint8_t n;
+
+	check_stack(current);
 
 	for (n = 0; n < nr_tasks; n++) {
 		if (++i == nr_tasks)

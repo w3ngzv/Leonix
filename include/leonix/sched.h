@@ -12,8 +12,8 @@
  * PC, switch.S the 33-byte frame, then timer_interrupt() tail-jumps
  * through scheduler_tick() into schedule(); arch_yield() is entered by
  * a call and builds the same frame.  With avr-gcc 9.5.0 -Os either path
- * peaks at 55 bytes, in get_jiffies() called from schedule(), rounded
- * up here.  Another compiler may
+ * peaks at 55 bytes, in get_jiffies() called from schedule().  The
+ * 2-byte canary brings it to 57, rounded up here.  Another compiler may
  * need a different value.
  */
 #define TASK_STACK_RESERVE	64
@@ -25,6 +25,7 @@ enum task_state {
 
 struct task {
 	uint8_t *sp;		/* must stay first, switch.S stores through it */
+	uint8_t *stack;		/* lowest address, holds the canary */
 	uint32_t wake_at;	/* jiffies, valid while TASK_SLEEPING */
 	uint8_t state;
 };
