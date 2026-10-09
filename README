@@ -64,7 +64,8 @@ Documentation
 
 Documentation/building.rst
 	Installing the toolchain, building the image and flashing it
-	through the Caterina bootloader.
+	through the Caterina bootloader.  "make htmldocs" renders all of
+	Documentation/ to HTML with Sphinx.
 
 Documentation/booting.rst
 	The machine state the Caterina bootloader leaves behind when it
