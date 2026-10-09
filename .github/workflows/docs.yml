@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Publish Documentation/ to GitHub Pages on every push to main that
+# touches it.  The build is the same as "make htmldocs", run with -W so
+# that a broken reference fails the job instead of publishing.
+
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Documentation/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install -r Documentation/sphinx/requirements.txt
+      - run: sphinx-build -W -b html -d "$RUNNER_TEMP/doctrees" Documentation Documentation/output
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: Documentation/output
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

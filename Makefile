@@ -50,6 +50,20 @@ flash: $(TARGET).hex
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) $(TARGET).elf $(TARGET).hex $(TARGET).map
 
+# HTML documentation in Documentation/output, as "make htmldocs" in Linux.
+# Missing Sphinx only skips the docs; the firmware build does not need it.
+SPHINXBUILD ?= sphinx-build
+DOCS_OUTPUT := Documentation/output
+
+htmldocs:
+	@command -v $(SPHINXBUILD) >/dev/null 2>&1 || { \
+		echo "$(SPHINXBUILD) not found, see Documentation/sphinx/requirements.txt"; \
+		exit 0; }; \
+	$(SPHINXBUILD) -b html -q -d $(DOCS_OUTPUT)/.doctrees Documentation $(DOCS_OUTPUT)/html
+
+cleandocs:
+	rm -rf $(DOCS_OUTPUT)
+
 -include $(OBJS:.o=.d)
 
-.PHONY: all disasm size flash clean
+.PHONY: all disasm size flash clean htmldocs cleandocs
