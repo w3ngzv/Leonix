@@ -15,9 +15,15 @@ A Chinese version of this file is in README.zh_CN.
 Status
 ------
 
-A 1 ms Timer1 tick drives a preemptive round-robin scheduler.  main()
-starts two tasks that blink the L and TX LEDs at different rates, and
-both run on the board.
+A 1 ms Timer1 tick drives a preemptive round-robin scheduler.  Tasks
+sleep until a deadline instead of spinning, and an idle task puts the
+CPU into Idle mode when none can run.  main() starts three tasks: two
+blink the L and TX LEDs, the third drives an HD44780 LCD through a
+PCF8574 I2C backpack, showing the uptime and how idle the CPU is, and
+reinitialises it after the backpack is unplugged and plugged back.
+
+All of this runs on the board.  With the LCD refreshed once a second
+the display reads about 98% idle.
 
 	make
 	make flash PORT=/dev/cu.usbmodemXXXX
@@ -32,8 +38,8 @@ Hardware
   - Arduino Leonardo (A000057): ATmega32U4 at 16 MHz, 32 KiB flash of
     which 28 KiB is left to the application by the Caterina
     bootloader, 2.5 KiB SRAM, 1 KiB EEPROM.
-  - Planned console: an HD44780 character LCD behind a PCF8574 I2C
-    expander.
+  - Console: an HD44780 16x2 character LCD behind a PCF8574 I2C
+    backpack, SDA on D2 and SCL on D3.
 
 
 Toolchain
@@ -66,8 +72,8 @@ Documentation/booting.rst
 
 Documentation/notes/index.rst
 	Design notes on the AVR architecture itself, the start code, the
-	I/O pins, the system tick and the scheduler, written for readers
-	new to kernel work.  Read them in
+	I/O pins, the system tick, the scheduler and the I2C LCD, written
+	for readers new to kernel work.  Read them in
 	the order listed there.
 
 Documentation/references/index.rst

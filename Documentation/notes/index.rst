@@ -20,3 +20,4 @@
    gpio
    tick
    scheduler
+   lcd
