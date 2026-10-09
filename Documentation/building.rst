@@ -160,9 +160,13 @@ Python 包与版本列在 Documentation/sphinx/requirements.txt. 其中 jieba �
 
   PATH=~/.venv/leonix-docs/bin:$PATH make htmldocs
 
-用浏览器打开 Documentation/output/index.html 查看. ``make cleandocs`` 删除
+用浏览器打开 Documentation/output/html/index.html 查看. ``make cleandocs`` 删除
 生成的文件. 找不到 sphinx-build 时, ``make htmldocs`` 只输出一行提示, 不影响
 固件的构建.
+
+推送到 main 且改动了 Documentation/ 时, .github/workflows/docs.yml 用同样的
+依赖构建文档, 并发布到 GitHub Pages. 该构建加了 ``-W``, 任何警告都会使发布
+失败.
 
 主题默认为 alabaster. 设置 DOCS_THEME 可以换用其他已安装的主题, 例如
 ``DOCS_THEME=sphinx_rtd_theme``, 与 Linux 的用法一致.

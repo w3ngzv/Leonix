@@ -59,7 +59,7 @@ htmldocs:
 	@command -v $(SPHINXBUILD) >/dev/null 2>&1 || { \
 		echo "$(SPHINXBUILD) not found, see Documentation/sphinx/requirements.txt"; \
 		exit 0; }; \
-	$(SPHINXBUILD) -b html -q Documentation $(DOCS_OUTPUT)
+	$(SPHINXBUILD) -b html -q -d $(DOCS_OUTPUT)/.doctrees Documentation $(DOCS_OUTPUT)/html
 
 cleandocs:
 	rm -rf $(DOCS_OUTPUT)
