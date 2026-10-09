@@ -13,8 +13,8 @@
  * (HD44780U table 6).  Only clear needs an explicit wait.
  */
 #include <leonix/i2c.h>
-#include <leonix/jiffies.h>
 #include <leonix/lcd.h>
+#include <leonix/sched.h>
 
 #define PCF_RS		(1 << 0)
 #define PCF_E		(1 << 2)
@@ -93,13 +93,13 @@ int lcd_init(void)
 	if (pcf_probe() < 0)
 		return -1;
 
-	mdelay(50);			/* > 40 ms after VCC rises to 2.7 V */
+	msleep(50);			/* > 40 ms after VCC rises to 2.7 V */
 	if (lcd_write_nibble(0x3, 0) < 0)
 		return -1;
-	mdelay(5);			/* > 4.1 ms */
+	msleep(5);			/* > 4.1 ms */
 	if (lcd_write_nibble(0x3, 0) < 0)
 		return -1;
-	mdelay(1);			/* > 100 us */
+	msleep(1);			/* > 100 us */
 	if (lcd_write_nibble(0x3, 0) < 0 ||
 	    lcd_write_nibble(0x2, 0) < 0)
 		return -1;
@@ -117,7 +117,7 @@ int lcd_clear(void)
 {
 	if (lcd_command(LCD_CLEAR) < 0)
 		return -1;
-	mdelay(LCD_CLEAR_MS);
+	msleep(LCD_CLEAR_MS);
 	return 0;
 }
 

@@ -7,21 +7,38 @@
 #define MAX_TASKS	4
 
 /*
- * Bytes a task stack must hold beyond the task's own use: the 33-byte
- * register frame from switch.S, the 2-byte PC pushed by the interrupt,
- * and the calls into timer_interrupt() and schedule() made on that same
- * stack.
+ * Bytes a task stack must hold beyond the task's own use.  Both ways
+ * into schedule() run on the outgoing task's stack: the tick pushes the
+ * PC, switch.S the 33-byte frame, then timer_interrupt() tail-jumps
+ * through scheduler_tick() into schedule(); arch_yield() is entered by
+ * a call and builds the same frame.  With avr-gcc 9.5.0 -Os either path
+ * peaks at 55 bytes, in get_jiffies() called from schedule().  The
+ * 2-byte canary brings it to 57, rounded up here.  Another compiler may
+ * need a different value.
  */
-#define TASK_STACK_RESERVE	48
+#define TASK_STACK_RESERVE	64
+
+enum task_state {
+	TASK_RUNNABLE,
+	TASK_SLEEPING,
+	TASK_DEAD,
+};
 
 struct task {
-	uint8_t *sp;	/* must stay first, switch.S stores through it */
+	uint8_t *sp;		/* must stay first, switch.S stores through it */
+	uint8_t *stack;		/* lowest address, holds the canary */
+	uint32_t wake_at;	/* jiffies, valid while TASK_SLEEPING */
+	uint8_t state;
 };
 
 extern struct task *current;
 
 int task_create(void (*entry)(void), uint8_t *stack, uint16_t size);
 void sched_start(void) __attribute__((noreturn));
+void scheduler_tick(void);
 void schedule(void);
+void sleep_until(uint32_t deadline);
+void msleep(uint16_t ms);
+uint32_t sched_idle_ticks(void);
 
 #endif /* _LEONIX_SCHED_H */

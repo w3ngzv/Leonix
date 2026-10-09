@@ -65,6 +65,24 @@ __vector_17:
 	restore_context
 	reti
 
+	/*
+	 * A task giving up the CPU before its tick is over.  The call has
+	 * already pushed the return address where the interrupt would have
+	 * pushed the PC, so the frame built here is the same as the tick's.
+	 * cli comes first so the saved SREG has I clear like every other
+	 * frame; reti sets it again on the way out, in whichever task that
+	 * turns out to be.
+	 */
+	.global	arch_yield
+arch_yield:
+	cli
+	save_context
+	store_sp
+	call	schedule
+	load_sp
+	restore_context
+	reti
+
 	.global	arch_start_first_task
 arch_start_first_task:
 	load_sp

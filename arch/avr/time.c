@@ -28,7 +28,7 @@ static volatile uint32_t jiffies;
 void timer_interrupt(void)
 {
 	jiffies++;
-	schedule();
+	scheduler_tick();
 }
 
 void time_init(void)
@@ -53,14 +53,3 @@ uint32_t get_jiffies(void)
 	return now;
 }
 
-/*
- * Spin for at least @ms milliseconds.  The current tick may be about to
- * end, so one more is added.  Interrupts must be enabled.
- */
-void mdelay(uint16_t ms)
-{
-	uint32_t deadline = get_jiffies() + ms + 1;
-
-	while (!time_after_eq(get_jiffies(), deadline))
-		;
-}
