@@ -72,18 +72,22 @@ static int lcd_put_right(uint32_t value, uint8_t width)
 /* Line 0 names the kernel.  The display needs it again after a replug. */
 static int lcd_show_banner(void)
 {
-	if (lcd_init() < 0 || lcd_puts("Leonix") < 0)
+	if (lcd_init() < 0 || lcd_puts("Leonix idle") < 0)
 		return -1;
 	return 0;
 }
 
 /*
- * Line 1 counts the seconds since sched_start(), right-aligned so a
- * shorter number overwrites a longer one.
+ * Line 0 ends with the share of ticks that found the CPU idle since the
+ * previous update, line 1 with the seconds since sched_start().  Both
+ * fields are right-aligned so a shorter number overwrites a longer one.
  */
-static int lcd_show_status(void)
+static int lcd_show_status(uint32_t idle_ticks, uint32_t ticks)
 {
-	if (lcd_set_cursor(0, 1) < 0 ||
+	if (lcd_set_cursor(LCD_COLS - 5, 0) < 0 ||
+	    lcd_put_right(ticks ? idle_ticks * 100 / ticks : 0, 4) < 0 ||
+	    lcd_puts("%") < 0 ||
+	    lcd_set_cursor(0, 1) < 0 ||
 	    lcd_puts("up") < 0 ||
 	    lcd_put_right(get_jiffies() / HZ, LCD_COLS - 4) < 0 ||
 	    lcd_puts(" s") < 0)
@@ -108,22 +112,28 @@ static int lcd_show_status(void)
 static void lcd_task(void)
 {
 	uint32_t now, next_update, next_retry, next_blink;
+	uint32_t last_jiffies, last_idle;
 	int online;
 
 	PORTB |= 1 << PORTB0;
 	DDRB |= 1 << DDB0;
 
 	online = lcd_show_banner() == 0;
-	next_retry = next_blink = get_jiffies();
-	next_update = next_retry + HZ;
+	last_jiffies = next_retry = next_blink = get_jiffies();
+	last_idle = sched_idle_ticks();
+	next_update = last_jiffies + HZ;
 	for (;;) {
 		if (online) {
 			sleep_until(next_update);
-			if (lcd_show_status() < 0) {
+			now = get_jiffies();
+			if (lcd_show_status(sched_idle_ticks() - last_idle,
+					    now - last_jiffies) < 0) {
 				online = 0;
 				next_retry = next_blink = get_jiffies();
 				continue;
 			}
+			last_idle = sched_idle_ticks();
+			last_jiffies = now;
 			next_update += HZ;
 			continue;
 		}
@@ -137,7 +147,9 @@ static void lcd_task(void)
 			if (lcd_show_banner() == 0) {
 				online = 1;
 				PORTB |= 1 << PORTB0;
-				next_update = get_jiffies() + HZ;
+				last_jiffies = get_jiffies();
+				last_idle = sched_idle_ticks();
+				next_update = last_jiffies + HZ;
 				continue;
 			}
 			next_retry = get_jiffies() + LCD_RETRY_INTERVAL;
