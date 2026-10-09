@@ -21,6 +21,7 @@
 enum task_state {
 	TASK_RUNNABLE,
 	TASK_SLEEPING,
+	TASK_DEAD,
 };
 
 struct task {
