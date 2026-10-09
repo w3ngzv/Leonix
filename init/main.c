@@ -10,6 +10,7 @@
 #define TX_BLINK_HALF_PERIOD	(HZ / 8)
 #define RX_ERROR_HALF_PERIOD	(HZ / 20)
 #define LCD_RETRY_INTERVAL	(HZ / 2)
+#define LCD_PAGE_UPDATES	5	/* seconds each page stays up */
 
 
 /*
@@ -83,12 +84,40 @@ static int lcd_show_banner(void)
 }
 
 /*
+ * The second page: line 0 is a label, line 1 the stack bytes each task
+ * has never touched, from task 0 up, with the idle task last.  The
+ * fields share the 16 columns equally.
+ */
+static int lcd_show_stack(void)
+{
+	uint8_t n, i, width;
+
+	for (n = 0; sched_stack_free(n) != SCHED_NO_TASK; n++)
+		;
+	width = LCD_COLS / (n + 1);
+
+	if (lcd_set_cursor(0, 0) < 0 ||
+	    lcd_puts("stack free      ") < 0 ||
+	    lcd_set_cursor(0, 1) < 0)
+		return -1;
+	for (i = 0; i < n; i++)
+		if (lcd_put_right(sched_stack_free(i), width) < 0)
+			return -1;
+	return lcd_put_right(sched_stack_free(SCHED_IDLE_TASK),
+			     LCD_COLS - n * width);
+}
+
+/*
  * Line 0 ends with the share of ticks that found the CPU idle since the
  * previous update, line 1 with the seconds since sched_start().  Both
  * fields are right-aligned so a shorter number overwrites a longer one.
+ * @relabel rewrites the label on line 0, which the stack page covers.
  */
-static int lcd_show_status(uint32_t idle_ticks, uint32_t ticks)
+static int lcd_show_status(uint32_t idle_ticks, uint32_t ticks, int relabel)
 {
+	if (relabel && (lcd_set_cursor(0, 0) < 0 ||
+			lcd_puts("Leonix idle") < 0))
+		return -1;
 	if (lcd_set_cursor(LCD_COLS - 5, 0) < 0 ||
 	    lcd_put_right(ticks ? idle_ticks * 100 / ticks : 0, 4) < 0 ||
 	    lcd_puts("%") < 0 ||
@@ -113,12 +142,16 @@ static int lcd_show_status(uint32_t idle_ticks, uint32_t ticks)
  * The driver only writes, so a failure shows only as a missing ACK.  A
  * backpack unplugged and back within one update period, under a second,
  * goes unnoticed, and the display stays blank until the next reset.
+ *
+ * Online, the display alternates every LCD_PAGE_UPDATES seconds between
+ * the idle share with the uptime and the stack page.
  */
 static void lcd_task(void)
 {
 	uint32_t now, next_update, next_retry, next_blink;
 	uint32_t last_jiffies, last_idle;
-	int online;
+	uint8_t page_age = 0;
+	int online, stack_page = 0, err;
 
 	PORTB |= 1 << PORTB0;
 	DDRB |= 1 << DDB0;
@@ -131,8 +164,17 @@ static void lcd_task(void)
 		if (online) {
 			sleep_until(next_update);
 			now = get_jiffies();
-			if (lcd_show_status(sched_idle_ticks() - last_idle,
-					    now - last_jiffies) < 0) {
+			if (++page_age == LCD_PAGE_UPDATES) {
+				page_age = 0;
+				stack_page = !stack_page;
+			}
+			if (stack_page)
+				err = lcd_show_stack();
+			else
+				err = lcd_show_status(sched_idle_ticks() - last_idle,
+						      now - last_jiffies,
+						      page_age == 0);
+			if (err < 0) {
 				online = 0;
 				next_retry = next_blink = get_jiffies();
 				continue;
@@ -151,6 +193,8 @@ static void lcd_task(void)
 		if (time_after_eq(now, next_retry)) {
 			if (lcd_show_banner() == 0) {
 				online = 1;
+				stack_page = 0;
+				page_age = 0;
 				PORTB |= 1 << PORTB0;
 				last_jiffies = get_jiffies();
 				last_idle = sched_idle_ticks();
