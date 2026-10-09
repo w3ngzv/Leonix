@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <avr/io.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include <leonix/jiffies.h>
 #include <leonix/lcd.h>
@@ -13,8 +11,6 @@
 #define RX_ERROR_HALF_PERIOD	(HZ / 20)
 #define LCD_RETRY_INTERVAL	(HZ / 2)
 
-/* "4294967" is the most uptime in seconds a 32-bit jiffies reaches. */
-#define UPTIME_DIGITS		7
 
 /*
  * Kept as a writable global so it lands in .data and the copy loop in
@@ -56,17 +52,26 @@ static void blink_tx(void)
 	}
 }
 
-/* Write @value right-aligned in a field of @width characters. */
+/*
+ * Write @value in decimal, right-aligned in a field of @width characters.
+ * A value with more digits than @width is written in full.  Digits are
+ * produced from the right, so the field needs no reversal and no length
+ * count before padding.  @width must not exceed LCD_COLS; a 32-bit value
+ * has at most 10 digits, which also fits.
+ */
 static int lcd_put_right(uint32_t value, uint8_t width)
 {
-	char digits[UPTIME_DIGITS + 1];
-	uint8_t len;
+	char field[LCD_COLS + 1];
+	char *p = field + LCD_COLS;
 
-	ultoa(value, digits, 10);
-	for (len = strlen(digits); len < width; len++)
-		if (lcd_puts(" ") < 0)
-			return -1;
-	return lcd_puts(digits);
+	*p = '\0';
+	do {
+		*--p = '0' + value % 10;
+		value /= 10;
+	} while (value);
+	while (p > field + LCD_COLS - width)
+		*--p = ' ';
+	return lcd_puts(p);
 }
 
 /* Line 0 names the kernel.  The display needs it again after a replug. */
