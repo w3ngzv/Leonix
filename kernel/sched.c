@@ -45,10 +45,15 @@ struct task *current;
 extern void arch_start_first_task(void) __attribute__((noreturn));
 extern void arch_yield(void);
 
-/* An entry function that returns lands here, see task_init(). */
+/*
+ * An entry function that returns lands here, see task_init().  The task
+ * leaves the run queue for good; the others keep running.  Its stack is
+ * never reused.
+ */
 static void task_exit(void)
 {
-	cli();
+	current->state = TASK_DEAD;
+	arch_yield();
 	for (;;)
 		;
 }
@@ -195,7 +200,7 @@ void msleep(uint16_t ms)
 }
 
 /*
- * Runs only when every other task sleeps.  In Idle mode the
+ * Runs only when every other task sleeps or is dead.  In Idle mode the
  * CPU stops but Timer1 keeps counting (datasheet 7.1), and the next tick
  * wakes it into the interrupt that may switch to a woken task.
  */
