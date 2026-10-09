@@ -18,6 +18,7 @@
 
 #include <leonix/i2c.h>
 #include <leonix/jiffies.h>
+#include <leonix/panic.h>
 
 /* PCF8574 is a standard-mode part, 100 kHz at most. */
 #define I2C_SCL_HZ	100000UL
@@ -25,6 +26,9 @@
 
 /* One byte takes 90 us at 100 kHz; anything near 2 ms means a stuck bus. */
 #define I2C_TIMEOUT_MS	2
+
+/* Polling step of a timeout after panic(), see i2c_timed_out(). */
+#define I2C_SPIN_US	10
 
 /*
  * UM10204 3.1.16: a slave stuck holding SDA low lets go within nine
@@ -36,6 +40,8 @@
 
 _Static_assert(I2C_TWBR >= 10, "datasheet 20.5.2: TWBR below 10 corrupts master output");
 _Static_assert(I2C_TWBR <= 255, "TWBR is 8 bits, needs a TWI prescaler");
+
+static void i2c_reset(void);
 
 /*
  * The internal pull-ups (20 to 50 kOhm, datasheet table 29-1) are weak
@@ -54,31 +60,55 @@ void i2c_init(void)
 	PORTD |= 1 << PORTD1;
 	TWSR = 0;			/* prescaler 1 */
 	TWBR = I2C_TWBR;
-	TWCR = 1 << TWEN;
+	i2c_reset();
 }
 
 /*
- * True once @deadline has passed and @mask in TWCR still reads @busy.
- *
- * The clock is sampled before the register.  The task can be switched
- * out for two ticks or more between any two instructions, while the
- * TWI hardware keeps running; reading TWCR last means a transfer that
- * finished during that gap is seen as finished, not as a timeout.
+ * A wait has a jiffies deadline and a spin budget.  Normally the
+ * deadline counts: the task can be switched out for two ticks or more
+ * between any two instructions, so only the clock measures time.  After
+ * panic() the tick is off and jiffies stands still, but nothing switches
+ * the CPU away either, so counting I2C_SPIN_US steps measures it.
  */
-static int i2c_timed_out(uint32_t deadline, uint8_t mask, uint8_t busy)
-{
-	int expired = time_after_eq(get_jiffies(), deadline);
+struct i2c_deadline {
+	uint32_t jiffies;
+	uint16_t spins;
+};
 
+static void i2c_deadline_start(struct i2c_deadline *d)
+{
+	d->jiffies = get_jiffies() + I2C_TIMEOUT_MS + 1;
+	d->spins = I2C_TIMEOUT_MS * 1000UL / I2C_SPIN_US;
+}
+
+/*
+ * True once @d has passed and @mask in TWCR still reads @busy.
+ *
+ * The clock is sampled before the register.  A transfer that finished
+ * while the task was switched out is then seen as finished when TWCR is
+ * read, not as a timeout.
+ */
+static int i2c_timed_out(struct i2c_deadline *d, uint8_t mask, uint8_t busy)
+{
+	int expired;
+
+	if (oops_in_progress) {
+		_delay_us(I2C_SPIN_US);
+		expired = d->spins-- == 0;
+	} else {
+		expired = time_after_eq(get_jiffies(), d->jiffies);
+	}
 	return expired && (TWCR & mask) == busy;
 }
 
 /* Returns the status code with the prescaler bits masked, or -1. */
 static int i2c_wait(void)
 {
-	uint32_t deadline = get_jiffies() + I2C_TIMEOUT_MS + 1;
+	struct i2c_deadline deadline;
 
+	i2c_deadline_start(&deadline);
 	while (!(TWCR & (1 << TWINT)))
-		if (i2c_timed_out(deadline, 1 << TWINT, 0))
+		if (i2c_timed_out(&deadline, 1 << TWINT, 0))
 			return -1;
 	return TW_STATUS;
 }
@@ -151,11 +181,12 @@ static void i2c_reset(void)
  */
 static void i2c_stop(void)
 {
-	uint32_t deadline = get_jiffies() + I2C_TIMEOUT_MS + 1;
+	struct i2c_deadline deadline;
 
+	i2c_deadline_start(&deadline);
 	TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN);
 	while (TWCR & (1 << TWSTO))
-		if (i2c_timed_out(deadline, 1 << TWSTO, 1 << TWSTO)) {
+		if (i2c_timed_out(&deadline, 1 << TWSTO, 1 << TWSTO)) {
 			i2c_reset();
 			return;
 		}

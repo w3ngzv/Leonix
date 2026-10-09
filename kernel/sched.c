@@ -115,7 +115,8 @@ int task_create(void (*entry)(void), uint8_t *stack, uint16_t size)
 static void check_stack(const struct task *t)
 {
 	if (t->stack[0] != STACK_CANARY_LO || t->stack[1] != STACK_CANARY_HI)
-		panic();
+		panic(PANIC_STACK_OVERFLOW,
+		      t == &idle_task ? PANIC_IDLE_TASK : t - tasks);
 }
 
 /*

@@ -12,8 +12,11 @@
  * 100 kHz, which already exceeds the 37 us most instructions need
  * (HD44780U table 6).  Only clear needs an explicit wait.
  */
+#include <util/delay.h>
+
 #include <leonix/i2c.h>
 #include <leonix/lcd.h>
+#include <leonix/panic.h>
 #include <leonix/sched.h>
 
 #define PCF_RS		(1 << 0)
@@ -40,6 +43,21 @@
 #define LCD_CLEAR_MS	2
 
 static uint8_t pcf_addr;
+
+/*
+ * Sleep in normal running.  After panic() the scheduler must not be
+ * entered again, so the wait is a busy loop instead; the HD44780 waits
+ * only have a lower bound, and either way meets it.
+ */
+static void lcd_delay(uint16_t ms)
+{
+	if (!oops_in_progress) {
+		msleep(ms);
+		return;
+	}
+	while (ms--)
+		_delay_ms(1);
+}
 
 /*
  * E must rise after RS and the data are stable, and the HD44780 latches
@@ -93,13 +111,13 @@ int lcd_init(void)
 	if (pcf_probe() < 0)
 		return -1;
 
-	msleep(50);			/* > 40 ms after VCC rises to 2.7 V */
+	lcd_delay(50);			/* > 40 ms after VCC rises to 2.7 V */
 	if (lcd_write_nibble(0x3, 0) < 0)
 		return -1;
-	msleep(5);			/* > 4.1 ms */
+	lcd_delay(5);			/* > 4.1 ms */
 	if (lcd_write_nibble(0x3, 0) < 0)
 		return -1;
-	msleep(1);			/* > 100 us */
+	lcd_delay(1);			/* > 100 us */
 	if (lcd_write_nibble(0x3, 0) < 0 ||
 	    lcd_write_nibble(0x2, 0) < 0)
 		return -1;
@@ -117,7 +135,7 @@ int lcd_clear(void)
 {
 	if (lcd_command(LCD_CLEAR) < 0)
 		return -1;
-	msleep(LCD_CLEAR_MS);
+	lcd_delay(LCD_CLEAR_MS);
 	return 0;
 }
 

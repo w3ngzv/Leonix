@@ -10,6 +10,8 @@
 
 #include <avr/io.h>
 
+#include <leonix/panic.h>
+
 #define NR_VECTORS	43
 
 	.section .vectors, "ax", @progbits
@@ -86,8 +88,29 @@ __do_clear_bss:
 
 /*
  * Any vector without a handler ends up here.  The CPU has already
- * cleared the I flag on entry, so spinning is enough to stop.
+ * cleared the I flag on entry.  Which vector it was is lost, since every
+ * unhandled vector is the same weak alias.
  */
 	.global	__bad_interrupt
 __bad_interrupt:
-	rjmp	__bad_interrupt
+	ldi	r24, PANIC_BAD_INTERRUPT
+	ldi	r22, PANIC_NO_TASK
+	rjmp	panic
+
+/*
+ * void panic(uint8_t reason, uint8_t task)
+ *
+ * The caller's stack may be the one that overflowed, so SP is moved to
+ * RAMEND before panic_halt() runs any C.  The arguments stay in r24 and
+ * r22, and r1 is cleared for C, since a bad interrupt can arrive with r1
+ * in use.
+ */
+	.global	panic
+panic:
+	cli
+	ldi	r26, lo8(RAMEND)
+	ldi	r27, hi8(RAMEND)
+	out	_SFR_IO_ADDR(SPH), r27
+	out	_SFR_IO_ADDR(SPL), r26
+	clr	r1
+	jmp	panic_halt
