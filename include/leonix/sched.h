@@ -33,8 +33,10 @@ extern struct task *current;
 
 int task_create(void (*entry)(void), uint8_t *stack, uint16_t size);
 void sched_start(void) __attribute__((noreturn));
+void scheduler_tick(void);
 void schedule(void);
 void sleep_until(uint32_t deadline);
 void msleep(uint16_t ms);
+uint32_t sched_idle_ticks(void);
 
 #endif /* _LEONIX_SCHED_H */

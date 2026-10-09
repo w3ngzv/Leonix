@@ -9,6 +9,7 @@
  */
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
+#include <util/atomic.h>
 
 #include <leonix/jiffies.h>
 #include <leonix/sched.h>
@@ -28,6 +29,7 @@ static uint8_t current_index;
 
 static struct task idle_task;
 static uint8_t idle_stack[IDLE_STACK_SIZE];
+static uint32_t idle_ticks;
 
 struct task *current;
 
@@ -115,6 +117,29 @@ void schedule(void)
 		}
 	}
 	current = &idle_task;
+}
+
+/*
+ * Called from the tick interrupt.  The tick lands on whichever task is
+ * running at that instant, so counting the ticks that land on the idle
+ * task samples how much of the time the CPU had nothing to do.
+ */
+void scheduler_tick(void)
+{
+	if (current == &idle_task)
+		idle_ticks++;
+	schedule();
+}
+
+/* Ticks that found the CPU idle since sched_start(). */
+uint32_t sched_idle_ticks(void)
+{
+	uint32_t ticks;
+
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+		ticks = idle_ticks;
+	}
+	return ticks;
 }
 
 /*

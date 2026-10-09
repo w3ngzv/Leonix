@@ -28,7 +28,7 @@ static volatile uint32_t jiffies;
 void timer_interrupt(void)
 {
 	jiffies++;
-	schedule();
+	scheduler_tick();
 }
 
 void time_init(void)
