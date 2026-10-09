@@ -55,6 +55,7 @@ Leonix 没有 USB CDC 端口, 无法接收 1200 波特率复位, 所以只能按
 
 Documentation/building.rst
 	工具链的安装, 映像的构建, 以及经由 Caterina bootloader 烧录的步骤.
+	"make htmldocs" 用 Sphinx 把 Documentation/ 渲染成 HTML.
 
 Documentation/booting.rst
 	Caterina bootloader 跳转到应用时留下的机器状态, 以及启动代码需要
