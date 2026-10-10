@@ -1,23 +1,28 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * One namespace for every file, the way Linux's VFS joins its
- * filesystems.  Paths are absolute.  A path is handed to the filesystem
- * whose mount point is its longest prefix ending at a '/'; there are no
- * directories inside filesystems, so that is all the walk there is.
+ * filesystems.  Paths are absolute.  A path goes to the first mount
+ * point that is a prefix of it ending at a '/', with "/" last to catch
+ * the rest; there are no directories inside filesystems, so that is all
+ * the walk there is.
  *
- * The root directory lists the mount points.
+ * The root directory lists the other mount points, then the files of
+ * lxfs, which is always the root filesystem.
  */
 #include <avr/pgmspace.h>
 #include <stddef.h>
 #include <string.h>
 
 #include <leonix/errno.h>
+#include <leonix/lxfs.h>
 #include <leonix/unistd.h>
 
 static const char dev_path[] PROGMEM = "/dev";
+static const char root_path[] PROGMEM = "/";
 
 static const struct mount mounts[] = {
 	{ dev_path, devfs_open, NULL },
+	{ root_path, lxfs_open, lxfs_unlink },	/* last */
 };
 
 #define NR_MOUNTS	(sizeof(mounts) / sizeof(mounts[0]))
@@ -26,8 +31,8 @@ static struct file files[MAX_FDS];
 
 static int root_readdir(struct file *f, char *name, uint8_t size)
 {
-	if (f->f_pos >= NR_MOUNTS)
-		return 0;
+	if (f->f_pos >= NR_MOUNTS - 1)
+		return lxfs_readdir(f, name, size);
 	strlcpy_P(name, mounts[f->f_pos++].path + 1, size);
 	return 1;
 }
@@ -37,8 +42,8 @@ static const struct file_operations root_fops = {
 };
 
 /*
- * The mount point @path falls under, with *rest set past the prefix.
- * NULL for the root directory itself or a path under no mount point.
+ * The mount point @path falls under, with *rest set past the prefix;
+ * for "/" the whole path is the rest.
  */
 static const struct mount *lookup_mount(const char *path, const char **rest)
 {
@@ -46,6 +51,10 @@ static const struct mount *lookup_mount(const char *path, const char **rest)
 	size_t len;
 
 	for (i = 0; i < NR_MOUNTS; i++) {
+		if (mounts[i].path == root_path) {
+			*rest = path;
+			return &mounts[i];
+		}
 		len = strlen_P(mounts[i].path);
 		if (strncmp_P(path, mounts[i].path, len))
 			continue;
@@ -87,8 +96,6 @@ int open(const char *path, uint16_t flags)
 		return fd;
 	}
 	mnt = lookup_mount(path, &rest);
-	if (!mnt)
-		return -ENOENT;
 	err = mnt->open(f, rest, flags);
 	if (err < 0) {
 		f->f_op = NULL;
@@ -151,9 +158,11 @@ int unlink(const char *path)
 	const struct mount *mnt;
 	const char *rest;
 
-	mnt = lookup_mount(path, &rest);
-	if (!mnt || !rest[0])
+	if (path[0] != '/')
 		return -ENOENT;
+	mnt = lookup_mount(path, &rest);
+	if (!rest[0] || !strcmp_P(rest, PSTR("/")))
+		return -EISDIR;
 	if (!mnt->unlink)
 		return -EROFS;
 	return mnt->unlink(rest);
