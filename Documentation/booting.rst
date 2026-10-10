@@ -170,7 +170,7 @@ Leonix 运行时, ``make flash`` 先以 1200 波特率打开并关闭 Leonix 的
 7eed809, 或者 Leonix 没有运行时, 仍需手动按下复位键, 并在 bootloader 的
 等待窗口内启动 avrdude::
 
-  avrdude -p m32u4 -c avr109 -P <port> -U flash:w:leonix.hex:i
+  avrdude -p m32u4 -c avr109 -P <port> -b 57600 -D -U flash:w:leonix.hex:i
 
 2026-10-08 在板子上按下复位键, 呼吸灯持续约 8 秒后进入应用, 与源码中的
 TIMEOUT_PERIOD 一致. 该时长为目测, 未用仪器计时.

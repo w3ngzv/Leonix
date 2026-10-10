@@ -60,6 +60,11 @@ size: $(TARGET).elf
 # the board is taken to be in the bootloader already, for instance after
 # a press of RESET, and avrdude runs straight away.  Waits are in tenths
 # of a second.
+#
+# -D skips avrdude's chip erase.  Caterina erases each page before it
+# writes it (Caterina.c, ReadWriteMemoryBlock()), so the erase would only
+# wear the pages the image does not reach and erase the image pages a
+# second time.
 FLASH_DETACH_WAIT := 10
 FLASH_ATTACH_WAIT := 80
 
@@ -72,7 +77,7 @@ flash: $(TARGET).hex
 	n=0; while [ ! -e "$(PORT)" ] && [ $$n -lt $(FLASH_ATTACH_WAIT) ]; do \
 		sleep 0.1; n=$$((n + 1)); done; \
 	test -e "$(PORT)" || { echo "$(PORT) did not come back"; exit 1; }
-	avrdude -p m32u4 -c avr109 -P $(PORT) -b 57600 -U flash:w:$<:i
+	avrdude -p m32u4 -c avr109 -P $(PORT) -b 57600 -D -U flash:w:$<:i
 
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) $(TARGET).elf $(TARGET).hex $(TARGET).map $(TEST_BIN)
