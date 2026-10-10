@@ -22,8 +22,17 @@ SIZE    := avr-size
 CPPFLAGS := -DF_CPU=$(F_CPU) -Iinclude
 CFLAGS   := -mmcu=$(MCU) -std=c11 -Os -g -Wall -Wextra -Werror
 ASFLAGS  := -mmcu=$(MCU) -g -Wall -Werror
+# SRAM layout, see include/leonix/memlayout.h; data addresses carry the
+# linker's 0x800000 offset.  The boot stack between .bss and the boot key
+# must hold main() and panic(), about 90 bytes each by -fstack-usage.
+BOOT_KEY_ADDR     := 0x800800
+TASK_STACKS_START := 0x800802
+SRAM_END          := 0x800b00
+BOOT_STACK_MIN    := 128
+
 LDFLAGS  := -mmcu=$(MCU) -nostartfiles \
 	    -Wl,--defsym=__TEXT_REGION_LENGTH__=$(APP_FLASH_SIZE) \
+	    -Wl,--section-start=.noinit=$(TASK_STACKS_START) \
 	    -Wl,-Map=$(TARGET).map
 
 all: $(TARGET).hex
@@ -34,14 +43,15 @@ all: $(TARGET).hex
 %.o: %.S
 	$(CC) $(CPPFLAGS) $(ASFLAGS) -MMD -MP -c -o $@ $<
 
-# Caterina's boot key is at SRAM 0x0800, see arch/avr/usb.c.
-BOOT_KEY_ADDR := 0x800800
-
 $(TARGET).elf: $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^
 	@bss_end=$$($(NM) $@ | awk '$$3 == "__bss_end" { print $$1 }'); \
-	test $$((0x$$bss_end)) -le $$(($(BOOT_KEY_ADDR))) || { \
-		echo ".bss ends at 0x$$bss_end, past the boot key"; rm -f $@; exit 1; }
+	set -- $$($(OBJDUMP) -h $@ | awk '$$2 == ".noinit" { print $$3, $$4 }'); \
+	noinit_end=$$((0x$$1 + 0x$$2)); \
+	test $$((0x$$bss_end + $(BOOT_STACK_MIN))) -le $$(($(BOOT_KEY_ADDR))) || { \
+		echo ".bss ends at 0x$$bss_end, too close to the boot key"; rm -f $@; exit 1; }; \
+	test $$noinit_end -le $$(($(SRAM_END))) || { \
+		echo ".noinit ends past the end of SRAM"; rm -f $@; exit 1; }
 
 $(TARGET).hex: $(TARGET).elf
 	$(OBJCOPY) -O ihex -R .eeprom $< $@

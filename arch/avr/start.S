@@ -10,6 +10,7 @@
 
 #include <avr/io.h>
 
+#include <leonix/memlayout.h>
 #include <leonix/panic.h>
 
 #define NR_VECTORS	43
@@ -32,8 +33,8 @@ __vectors:
 __reset:
 	clr	r1
 	out	_SFR_IO_ADDR(SREG), r1
-	ldi	r28, lo8(RAMEND)
-	ldi	r29, hi8(RAMEND)
+	ldi	r28, lo8(BOOT_STACK_TOP)
+	ldi	r29, hi8(BOOT_STACK_TOP)
 	out	_SFR_IO_ADDR(SPH), r29
 	out	_SFR_IO_ADDR(SPL), r28
 
@@ -101,15 +102,16 @@ __bad_interrupt:
  * void panic(uint8_t reason, uint8_t task)
  *
  * The caller's stack may be the one that overflowed, so SP is moved to
- * RAMEND before panic_halt() runs any C.  The arguments stay in r24 and
+ * the boot stack before panic_halt() runs any C.  No task uses the boot
+ * stack, and it lies below the boot key.  The arguments stay in r24 and
  * r22, and r1 is cleared for C, since a bad interrupt can arrive with r1
  * in use.
  */
 	.global	panic
 panic:
 	cli
-	ldi	r26, lo8(RAMEND)
-	ldi	r27, hi8(RAMEND)
+	ldi	r26, lo8(BOOT_STACK_TOP)
+	ldi	r27, hi8(BOOT_STACK_TOP)
 	out	_SFR_IO_ADDR(SPH), r27
 	out	_SFR_IO_ADDR(SPL), r26
 	clr	r1

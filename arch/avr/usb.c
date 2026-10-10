@@ -47,6 +47,7 @@
 #include <util/delay.h>
 
 #include <leonix/fs.h>
+#include <leonix/memlayout.h>
 #include <leonix/tty.h>
 #include <leonix/printk.h>
 #include <leonix/sched.h>
@@ -119,11 +120,10 @@
 #define CDC_LINE_DTR		(1 << 0)
 
 /*
- * Caterina stays in the bootloader after a watchdog reset if this word
- * holds the key.  The address is in the boot stack, which nothing uses
- * after sched_start(); the Makefile checks that .bss ends below it.
+ * Caterina stays in the bootloader after a watchdog reset if the word at
+ * BOOT_KEY_ADDR holds the key.  include/leonix/memlayout.h keeps
+ * everything else off that word.
  */
-#define BOOT_KEY_ADDR		0x0800
 #define BOOT_KEY		0x7777
 #define BOOTLOADER_BAUD		1200
 
@@ -210,7 +210,7 @@ static const uint8_t product_desc[] PROGMEM = {
 	14, DESC_STRING, 'L', 0, 'e', 0, 'o', 0, 'n', 0, 'i', 0, 'x', 0,
 };
 
-static uint8_t usb_task_stack[USB_TASK_STACK_SIZE];
+static uint8_t usb_task_stack[USB_TASK_STACK_SIZE] __task_stack;
 static struct wait_queue usb_wq = WAIT_QUEUE_INIT;
 static volatile uint8_t usb_events;
 
