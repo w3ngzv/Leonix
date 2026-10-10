@@ -32,6 +32,9 @@ int main(void) {
 	T("50%", 64, "%u%%", 50);
 	T("trail%", 64, "trail%");
 	T("[%q]", 64, "[%q]");
+	T("   42", 64, "%*u", 5, 42);
+	T("[  x]", 64, "[%*s]", 3, "x");
+	T("00042", 64, "%0*u", 5, 42);
 	printf(fails ? "%d failures\n" : "all passed\n", fails);
 	return fails != 0;
 }
