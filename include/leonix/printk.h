@@ -9,9 +9,13 @@
 /*
  * The kernel log keeps the last LOG_RECORDS messages, each stamped with
  * the seconds since boot.  A message is cut to LOG_TEXT - 1 characters,
- * which with the stamp fills one row of the 16-column LCD.
+ * which with the stamp makes a 16-byte record.  The length was chosen
+ * for a row of the LCD, which no longer shows the log.
+ *
+ * Sixteen records hold everything written in the first seconds after
+ * boot, before a terminal on the USB console is likely to be open.
  */
-#define LOG_RECORDS	4
+#define LOG_RECORDS	16
 #define LOG_TEXT	14
 
 struct log_record {
@@ -23,6 +27,8 @@ struct log_record {
 #define printk(fmt, ...)	printk_P(PSTR(fmt), ##__VA_ARGS__)
 
 void printk_P(const char *fmt, ...);
-uint16_t log_last(struct log_record *rec);
+uint16_t log_newest(void);
+int log_read(uint16_t seq, struct log_record *rec);
+void register_console(void (*kick)(void));
 
 #endif /* _LEONIX_PRINTK_H */
