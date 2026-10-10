@@ -145,9 +145,10 @@ static int lcd_show_status(uint32_t idle_ticks, uint32_t ticks, int relabel)
  * cannot report its own fault.  RX lights on low, so it is off with the
  * pin high.
  *
- * The driver only writes, so a failure shows only as a missing ACK.  A
- * backpack unplugged and back within one update period, under a second,
- * goes unnoticed, and the display stays blank until the next reset.
+ * A backpack unplugged and back within one update period, under a
+ * second, misses no ACK.  lcd_check() before each refresh catches it
+ * instead, by the expander's power-on state, and the display is
+ * initialised again on the spot.
  *
  * Online, the display alternates every LCD_PAGE_UPDATES seconds between
  * the idle share with the uptime and the stack page.
@@ -184,10 +185,16 @@ static void lcd_task(void)
 				page_age = 0;
 				stack_page = !stack_page;
 			}
-			if (stack_page)
-				err = lcd_show_stack();
-			else
-				err = lcd_show_status(idle_now - last_idle,
+			err = lcd_check();
+			if (err == 0) {
+				/* Replugged since the last refresh. */
+				err = lcd_show_banner();
+				page_age = 0;
+				stack_page = 0;
+			}
+			if (err >= 0)
+				err = stack_page ? lcd_show_stack() :
+				      lcd_show_status(idle_now - last_idle,
 						      now - last_jiffies,
 						      page_age == 0);
 			if (err < 0) {
