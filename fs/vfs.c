@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * One namespace for every file, the way Linux's VFS joins its
- * filesystems.  Paths are absolute.  A path goes to the first mount
+ * filesystems.  A path not starting with '/' is taken from the root,
+ * which is the only working directory there is.  A path goes to the first mount
  * point that is a prefix of it ending at a '/', with "/" last to catch
  * the rest; there are no directories inside filesystems, so that is all
  * the walk there is.
@@ -15,6 +16,7 @@
 
 #include <leonix/errno.h>
 #include <leonix/lxfs.h>
+#include <leonix/tty.h>
 #include <leonix/unistd.h>
 
 static const char dev_path[] PROGMEM = "/dev";
@@ -28,6 +30,18 @@ static const struct mount mounts[] = {
 #define NR_MOUNTS	(sizeof(mounts) / sizeof(mounts[0]))
 
 static struct file files[MAX_FDS];
+
+/* A relative path with the root put in front.  One task uses the VFS. */
+static char abs_path[TTY_LINE + 2];
+
+static const char *absolute(const char *path)
+{
+	if (path[0] == '/')
+		return path;
+	abs_path[0] = '/';
+	strlcpy(abs_path + 1, path, sizeof(abs_path) - 1);
+	return abs_path;
+}
 
 static int root_readdir(struct file *f, char *name, uint8_t size)
 {
@@ -80,8 +94,7 @@ int open(const char *path, uint16_t flags)
 	struct file *f;
 	int fd, err;
 
-	if (path[0] != '/')
-		return -ENOENT;
+	path = absolute(path);
 	for (fd = 0; fd < MAX_FDS && files[fd].f_op; fd++)
 		;
 	if (fd == MAX_FDS)
@@ -158,8 +171,7 @@ int unlink(const char *path)
 	const struct mount *mnt;
 	const char *rest;
 
-	if (path[0] != '/')
-		return -ENOENT;
+	path = absolute(path);
 	mnt = lookup_mount(path, &rest);
 	if (!rest[0] || !strcmp_P(rest, PSTR("/")))
 		return -EISDIR;
