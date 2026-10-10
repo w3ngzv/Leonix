@@ -7,7 +7,8 @@ TARGET   := leonix
 APP_FLASH_SIZE := 28672
 
 OBJS := arch/avr/start.o arch/avr/switch.o arch/avr/time.o arch/avr/i2c.o \
-	arch/avr/panic.o kernel/sched.o drivers/lcd.o init/main.o
+	arch/avr/panic.o kernel/sched.o kernel/printk.o drivers/lcd.o \
+	lib/vsprintf.o init/main.o
 
 CC      := avr-gcc
 OBJCOPY := avr-objcopy
@@ -48,7 +49,18 @@ flash: $(TARGET).hex
 	avrdude -p m32u4 -c avr109 -P $(PORT) -b 57600 -U flash:w:$<:i
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) $(TARGET).elf $(TARGET).hex $(TARGET).map
+	rm -f $(OBJS) $(OBJS:.o=.d) $(TARGET).elf $(TARGET).hex $(TARGET).map $(TEST_BIN)
+
+# Host tests of the code in lib/, which has no AVR dependency.
+HOSTCC ?= cc
+TEST_BIN := tests/test_vsprintf
+
+check: $(TEST_BIN)
+	./$(TEST_BIN)
+
+$(TEST_BIN): tests/test_vsprintf.c lib/vsprintf.c include/leonix/kernel.h
+	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $@ \
+		tests/test_vsprintf.c lib/vsprintf.c
 
 # HTML documentation in Documentation/output, as "make htmldocs" in Linux.
 # Missing Sphinx only skips the docs; the firmware build does not need it.
@@ -66,4 +78,4 @@ cleandocs:
 
 -include $(OBJS:.o=.d)
 
-.PHONY: all disasm size flash clean htmldocs cleandocs
+.PHONY: all disasm size flash clean check htmldocs cleandocs

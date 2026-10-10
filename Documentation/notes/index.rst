@@ -21,3 +21,4 @@
    tick
    scheduler
    lcd
+   printk
