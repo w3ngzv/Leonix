@@ -32,8 +32,8 @@ uint16_t blink_half_period = HZ / 2;
 
 static uint8_t blink_l_stack[TASK_STACK_SIZE];
 static uint8_t blink_tx_stack[TASK_STACK_SIZE];
-static uint8_t lcd_stack[LCD_TASK_STACK_SIZE];
-static uint8_t shell_stack[SHELL_STACK_SIZE];
+static uint8_t lcd_stack[LCD_TASK_STACK_SIZE] __task_stack;
+static uint8_t shell_stack[SHELL_STACK_SIZE] __task_stack;
 
 /*
  * Each LED task sleeps until its next toggle.  The deadline advances by
