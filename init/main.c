@@ -3,6 +3,7 @@
 #include <util/atomic.h>
 
 #include <leonix/jiffies.h>
+#include <leonix/kernel.h>
 #include <leonix/lcd.h>
 #include <leonix/sched.h>
 
@@ -59,34 +60,22 @@ static void blink_tx(void)
 	}
 }
 
-/*
- * Write @value in decimal, right-aligned in a field of @width characters.
- * A value with more digits than @width is written in full.  Digits are
- * produced from the right, so the field needs no reversal and no length
- * count before padding.  @width must not exceed LCD_COLS; a 32-bit value
- * has at most 10 digits, which also fits.
- */
-static int lcd_put_right(uint32_t value, uint8_t width)
-{
-	char field[LCD_COLS + 1];
-	char *p = field + LCD_COLS;
-
-	*p = '\0';
-	do {
-		*--p = '0' + value % 10;
-		value /= 10;
-	} while (value);
-	while (p > field + LCD_COLS - width)
-		*--p = ' ';
-	return lcd_puts(p);
-}
+/* Format one line, or part of one, and write it at (@col, @row). */
+#define lcd_print_at(col, row, fmt, ...)				\
+	({								\
+		char __line[LCD_COLS + 1];				\
+									\
+		snprintk(__line, sizeof(__line), fmt, ##__VA_ARGS__);	\
+		lcd_set_cursor((col), (row)) < 0 || lcd_puts(__line) < 0 \
+			? -1 : 0;					\
+	})
 
 /* Line 0 names the kernel.  The display needs it again after a replug. */
 static int lcd_show_banner(void)
 {
-	if (lcd_init() < 0 || lcd_puts("Leonix idle") < 0)
+	if (lcd_init() < 0)
 		return -1;
-	return 0;
+	return lcd_print_at(0, 0, "Leonix idle");
 }
 
 /*
@@ -96,21 +85,25 @@ static int lcd_show_banner(void)
  */
 static int lcd_show_stack(void)
 {
-	uint8_t n, i, width;
+	char line[LCD_COLS + 1];
+	uint8_t n, i, width, len = 0;
 
 	for (n = 0; sched_stack_free(n) != SCHED_NO_TASK; n++)
 		;
 	width = LCD_COLS / (n + 1);
 
+	for (i = 0; i < n; i++)
+		len += snprintk(line + len, sizeof(line) - len, "%*u", width,
+				sched_stack_free(i));
+	snprintk(line + len, sizeof(line) - len, "%*u", LCD_COLS - len,
+		 sched_stack_free(SCHED_IDLE_TASK));
+
+	/* line holds the figures; the label goes out first, from flash. */
 	if (lcd_set_cursor(0, 0) < 0 ||
-	    lcd_puts("stack free      ") < 0 ||
+	    lcd_puts_P(PSTR("stack free      ")) < 0 ||
 	    lcd_set_cursor(0, 1) < 0)
 		return -1;
-	for (i = 0; i < n; i++)
-		if (lcd_put_right(sched_stack_free(i), width) < 0)
-			return -1;
-	return lcd_put_right(sched_stack_free(SCHED_IDLE_TASK),
-			     LCD_COLS - n * width);
+	return lcd_puts(line);
 }
 
 /*
@@ -121,18 +114,13 @@ static int lcd_show_stack(void)
  */
 static int lcd_show_status(uint32_t idle_ticks, uint32_t ticks, int relabel)
 {
-	if (relabel && (lcd_set_cursor(0, 0) < 0 ||
-			lcd_puts("Leonix idle") < 0))
+	unsigned int idle = ticks ? idle_ticks * 100 / ticks : 0;
+
+	if (relabel && lcd_print_at(0, 0, "Leonix idle") < 0)
 		return -1;
-	if (lcd_set_cursor(LCD_COLS - 5, 0) < 0 ||
-	    lcd_put_right(ticks ? idle_ticks * 100 / ticks : 0, 4) < 0 ||
-	    lcd_puts("%") < 0 ||
-	    lcd_set_cursor(0, 1) < 0 ||
-	    lcd_puts("up") < 0 ||
-	    lcd_put_right(get_jiffies() / HZ, LCD_COLS - 4) < 0 ||
-	    lcd_puts(" s") < 0)
+	if (lcd_print_at(LCD_COLS - 5, 0, "%4u%%", idle) < 0)
 		return -1;
-	return 0;
+	return lcd_print_at(0, 1, "up%12lu s", get_jiffies() / HZ);
 }
 
 /*
