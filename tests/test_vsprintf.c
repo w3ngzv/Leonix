@@ -35,6 +35,11 @@ int main(void) {
 	T("   42", 64, "%*u", 5, 42);
 	T("[  x]", 64, "[%*s]", 3, "x");
 	T("00042", 64, "%0*u", 5, 42);
+	T("[42   ]", 64, "[%-5u]", 42);
+	T("[-7   ]", 64, "[%-5d]", -7);
+	T("[ab   ]", 64, "[%-5s]", "ab");
+	T("log 12     340 s", 64, "log %-5u%5u s", 12, 340);
+	T("[toolong]", 64, "[%-3s]", "toolong");
 	printf(fails ? "%d failures\n" : "all passed\n", fails);
 	return fails != 0;
 }
