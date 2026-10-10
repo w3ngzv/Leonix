@@ -17,12 +17,13 @@ Timer1 产生的 1 ms 节拍驱动抢占式轮转调度器. 任务以睡眠代�
 可运行时, 空闲任务使 CPU 进入 Idle 模式. main() 建立三个任务: 两个分别让
 L 与 TX 两个 LED 闪烁, 第三个经 PCF8574 I2C 背板驱动 HD44780 液晶屏, 显示
 运行时间与 CPU 的空闲程度, 背板拔下再插回后重新初始化液晶屏. 第四个任务
-负责 USB 设备.
+负责 USB 设备, 第五个任务在 USB 串口上运行一个小型 shell, 提供 ps、dmesg、
+uptime 与 devices.
 
 printk() 保留最近 16 条消息. 打开串口时先回放这些消息, 之后实时输出新的
-消息:
+消息并给出 shell 的提示符:
 
-	cat /dev/cu.usbmodemXXXX
+	screen /dev/cu.usbmodemXXXX
 
 以上功能均已在板子上运行. 液晶屏每秒刷新一次时, 显示的空闲比例为 99%.
 
@@ -69,8 +70,8 @@ Documentation/booting.rst
 	复原的部分.
 
 Documentation/notes/index.rst
-	AVR 架构本身、启动代码、引脚、系统节拍、调度器、I2C 液晶屏、内核日志
-	与 USB 串口的设计思考, 面向初次接触内核开发的读者.
+	AVR 架构本身、启动代码、引脚、系统节拍、调度器、I2C 液晶屏、内核日志、
+	USB 串口与 shell 的设计思考, 面向初次接触内核开发的读者.
 	按其中列出的顺序阅读.
 
 Documentation/references/index.rst
