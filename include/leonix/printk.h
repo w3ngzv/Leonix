@@ -24,5 +24,8 @@ struct log_record {
 
 void printk_P(const char *fmt, ...);
 uint16_t log_last(struct log_record *rec);
+uint16_t log_newest(void);
+int log_read(uint16_t seq, struct log_record *rec);
+void register_console(void (*kick)(void));
 
 #endif /* _LEONIX_PRINTK_H */
