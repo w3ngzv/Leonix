@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * The kernel log: a ring of fixed-size records in SRAM, the way Linux
- * keeps its log_buf, but small enough for 2.5 KiB.  The LCD shows the
- * newest record through log_last(); a console registered with
- * register_console() is told of each record and copies it out with
- * log_read().
+ * keeps its log_buf, but small enough for 2.5 KiB.  A console
+ * registered with register_console() is told of each record and copies
+ * it out with log_read().
  *
  * printk() formats on the caller's stack and copies the record in with
  * interrupts disabled, so it may be called from a task, from an
@@ -81,21 +80,4 @@ int log_read(uint16_t seq, struct log_record *rec)
 		}
 	}
 	return ret;
-}
-
-/*
- * Copy the newest record into @rec.  Returns the number of records
- * written since boot, the newest one's sequence number, or 0 when the
- * log is still empty and @rec is left alone.
- */
-uint16_t log_last(struct log_record *rec)
-{
-	uint16_t seq;
-
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		seq = log_seq;
-		if (seq)
-			*rec = log_buf[log_next ? log_next - 1 : LOG_RECORDS - 1];
-	}
-	return seq;
 }

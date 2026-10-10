@@ -19,8 +19,6 @@
 #define TX_BLINK_HALF_PERIOD	(HZ / 8)
 #define RX_ERROR_HALF_PERIOD	(HZ / 20)
 #define LCD_RETRY_INTERVAL	(HZ / 2)
-#define LCD_PAGE_UPDATES	5	/* seconds each page stays up */
-#define LCD_PAGES		3	/* status, stack, log */
 
 
 /*
@@ -88,62 +86,41 @@ static int __attribute__((noinline)) lcd_show_banner(void)
 }
 
 /*
- * The second page: line 0 is a label, line 1 the stack bytes each task
- * has never touched, from task 0 up, with the idle task last.  The
- * fields share the 16 columns equally.
+ * Report each stack whose untouched bytes have reached a new low, the
+ * way CONFIG_DEBUG_STACK_USAGE reports a new greatest depth in Linux.
+ * Called once a second; after the first few seconds a report means a
+ * path deeper than any before it has just run.
  */
-static int __attribute__((noinline)) lcd_show_stack(void)
+static void __attribute__((noinline)) report_stack_usage(void)
 {
-	char line[LCD_COLS + 1];
-	uint8_t n, i, width, len = 0;
+	static uint16_t lowest[MAX_TASKS + 1] = {
+		[0 ... MAX_TASKS] = SCHED_NO_TASK,
+	};
+	uint16_t free;
+	uint8_t i;
 
-	for (n = 0; sched_stack_free(n) != SCHED_NO_TASK; n++)
-		;
-	width = LCD_COLS / (n + 1);
-
-	for (i = 0; i < n; i++)
-		len += snprintk(line + len, sizeof(line) - len, "%*u", width,
-				sched_stack_free(i));
-	snprintk(line + len, sizeof(line) - len, "%*u", LCD_COLS - len,
-		 sched_stack_free(SCHED_IDLE_TASK));
-
-	/* line holds the figures; the label goes out first, from flash. */
-	if (lcd_set_cursor(0, 0) < 0 ||
-	    lcd_puts_P(PSTR("stack free      ")) < 0 ||
-	    lcd_set_cursor(0, 1) < 0)
-		return -1;
-	return lcd_puts(line);
-}
-
-/*
- * The third page: line 0 the number and time of the newest kernel log
- * record, line 1 its text.  Older records stay in the log unread.
- */
-static int __attribute__((noinline)) lcd_show_log(void)
-{
-	struct log_record rec;
-	uint16_t seq = log_last(&rec);
-
-	if (!seq)
-		return lcd_print_at(0, 0, "log empty       ") < 0 ||
-		       lcd_print_at(0, 1, "%16s", "") < 0 ? -1 : 0;
-	if (lcd_print_at(0, 0, "log %-5u%5u s", seq, rec.secs) < 0)
-		return -1;
-	return lcd_print_at(0, 1, "%-16s", rec.text);
+	for (i = 0; i <= MAX_TASKS; i++) {
+		free = sched_stack_free(i < MAX_TASKS ? i : SCHED_IDLE_TASK);
+		if (free == SCHED_NO_TASK || free >= lowest[i])
+			continue;
+		lowest[i] = free;
+		if (i < MAX_TASKS)
+			printk("stack t%u %u", i, free);
+		else
+			printk("stack idle %u", free);
+	}
 }
 
 /*
  * Line 0 ends with the share of ticks that found the CPU idle since the
  * previous update, line 1 with the seconds since sched_start().  Both
  * fields are right-aligned so a shorter number overwrites a longer one.
- * @relabel rewrites the label on line 0, which the stack page covers.
+ * The label on line 0 is lcd_show_banner()'s.
  */
-static int __attribute__((noinline)) lcd_show_status(uint32_t idle_ticks, uint32_t ticks, int relabel)
+static int __attribute__((noinline)) lcd_show_status(uint32_t idle_ticks, uint32_t ticks)
 {
 	unsigned int idle = ticks ? idle_ticks * 100 / ticks : 0;
 
-	if (relabel && lcd_print_at(0, 0, "Leonix idle") < 0)
-		return -1;
 	if (lcd_print_at(LCD_COLS - 5, 0, "%4u%%", idle) < 0)
 		return -1;
 	return lcd_print_at(0, 1, "up%12lu s", get_jiffies() / HZ);
@@ -164,16 +141,16 @@ static int __attribute__((noinline)) lcd_show_status(uint32_t idle_ticks, uint32
  * instead, by the expander's power-on state, and the display is
  * initialised again on the spot.
  *
- * Online, the display steps every LCD_PAGE_UPDATES seconds through the
- * idle share with the uptime, the stack page and the newest log record.
+ * The stack figures and the kernel log go to the USB console, see
+ * arch/avr/usb.c; the display keeps the status, which needs no computer.
+ * The stack check runs at every refresh and every retry, so a stack
+ * that runs low while the display is offline is still reported.
  */
 static void lcd_task(void)
 {
 	uint32_t now, next_update, next_retry, next_blink;
 	uint32_t last_jiffies, last_idle, idle_now;
-	uint8_t page_age = 0;
 	int online, err;
-	uint8_t page = 0;
 
 	PORTB |= 1 << PORTB0;
 	DDRB |= 1 << DDB0;
@@ -198,28 +175,15 @@ static void lcd_task(void)
 				now = get_jiffies();
 				idle_now = sched_idle_ticks();
 			}
-			if (++page_age == LCD_PAGE_UPDATES) {
-				page_age = 0;
-				if (++page == LCD_PAGES)
-					page = 0;
-			}
+			report_stack_usage();
 			err = lcd_check();
 			if (err == 0) {
 				printk("lcd replugged");
 				err = lcd_show_banner();
-				page_age = 0;
-				page = 0;
 			}
-			if (err >= 0) {
-				if (page == 1)
-					err = lcd_show_stack();
-				else if (page == 2)
-					err = lcd_show_log();
-				else
-					err = lcd_show_status(idle_now - last_idle,
-							      now - last_jiffies,
-							      page_age == 0);
-			}
+			if (err >= 0)
+				err = lcd_show_status(idle_now - last_idle,
+						      now - last_jiffies);
 			if (err < 0) {
 				printk("lcd offline");
 				online = 0;
@@ -238,11 +202,10 @@ static void lcd_task(void)
 			next_blink = now + RX_ERROR_HALF_PERIOD;
 		}
 		if (time_after_eq(now, next_retry)) {
+			report_stack_usage();
 			if (lcd_show_banner() == 0) {
 				printk("lcd online");
 				online = 1;
-				page = 0;
-				page_age = 0;
 				PORTB |= 1 << PORTB0;
 				last_jiffies = get_jiffies();
 				last_idle = sched_idle_ticks();
