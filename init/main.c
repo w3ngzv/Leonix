@@ -7,6 +7,7 @@
 #include <leonix/lcd.h>
 #include <leonix/printk.h>
 #include <leonix/sched.h>
+#include <leonix/shell.h>
 #include <leonix/usb.h>
 
 /*
@@ -16,6 +17,7 @@
  */
 #define TASK_STACK_SIZE		96
 #define LCD_TASK_STACK_SIZE	224
+#define SHELL_STACK_SIZE	256
 #define TX_BLINK_HALF_PERIOD	(HZ / 8)
 #define RX_ERROR_HALF_PERIOD	(HZ / 20)
 #define LCD_RETRY_INTERVAL	(HZ / 2)
@@ -31,6 +33,7 @@ uint16_t blink_half_period = HZ / 2;
 static uint8_t blink_l_stack[TASK_STACK_SIZE];
 static uint8_t blink_tx_stack[TASK_STACK_SIZE];
 static uint8_t lcd_stack[LCD_TASK_STACK_SIZE];
+static uint8_t shell_stack[SHELL_STACK_SIZE];
 
 /*
  * Each LED task sleeps until its next toggle.  The deadline advances by
@@ -227,5 +230,7 @@ int main(void)
 	task_create(lcd_task, lcd_stack, sizeof(lcd_stack));
 	if (usb_init() < 0)
 		printk("usb init failed");
+	else if (shell_init(shell_stack, sizeof(shell_stack)) < 0)
+		printk("no shell");
 	sched_start();
 }
