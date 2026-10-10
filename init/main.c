@@ -3,7 +3,9 @@
 #include <util/atomic.h>
 
 #include <leonix/jiffies.h>
+#include <leonix/kernel.h>
 #include <leonix/lcd.h>
+#include <leonix/printk.h>
 #include <leonix/sched.h>
 
 /*
@@ -17,6 +19,7 @@
 #define RX_ERROR_HALF_PERIOD	(HZ / 20)
 #define LCD_RETRY_INTERVAL	(HZ / 2)
 #define LCD_PAGE_UPDATES	5	/* seconds each page stays up */
+#define LCD_PAGES		3	/* status, stack, log */
 
 
 /*
@@ -60,33 +63,27 @@ static void blink_tx(void)
 }
 
 /*
- * Write @value in decimal, right-aligned in a field of @width characters.
- * A value with more digits than @width is written in full.  Digits are
- * produced from the right, so the field needs no reversal and no length
- * count before padding.  @width must not exceed LCD_COLS; a 32-bit value
- * has at most 10 digits, which also fits.
+ * Format one line, or part of one, and write it at (@col, @row).
+ *
+ * The lcd_show_*() functions are kept out of line.  Inlined, their line
+ * buffers would all sit in lcd_task()'s frame, under every printk() and
+ * I2C transfer the task makes.
  */
-static int lcd_put_right(uint32_t value, uint8_t width)
-{
-	char field[LCD_COLS + 1];
-	char *p = field + LCD_COLS;
-
-	*p = '\0';
-	do {
-		*--p = '0' + value % 10;
-		value /= 10;
-	} while (value);
-	while (p > field + LCD_COLS - width)
-		*--p = ' ';
-	return lcd_puts(p);
-}
+#define lcd_print_at(col, row, fmt, ...)				\
+	({								\
+		char __line[LCD_COLS + 1];				\
+									\
+		snprintk(__line, sizeof(__line), fmt, ##__VA_ARGS__);	\
+		lcd_set_cursor((col), (row)) < 0 || lcd_puts(__line) < 0 \
+			? -1 : 0;					\
+	})
 
 /* Line 0 names the kernel.  The display needs it again after a replug. */
-static int lcd_show_banner(void)
+static int __attribute__((noinline)) lcd_show_banner(void)
 {
-	if (lcd_init() < 0 || lcd_puts("Leonix idle") < 0)
+	if (lcd_init() < 0)
 		return -1;
-	return 0;
+	return lcd_print_at(0, 0, "Leonix idle");
 }
 
 /*
@@ -94,23 +91,44 @@ static int lcd_show_banner(void)
  * has never touched, from task 0 up, with the idle task last.  The
  * fields share the 16 columns equally.
  */
-static int lcd_show_stack(void)
+static int __attribute__((noinline)) lcd_show_stack(void)
 {
-	uint8_t n, i, width;
+	char line[LCD_COLS + 1];
+	uint8_t n, i, width, len = 0;
 
 	for (n = 0; sched_stack_free(n) != SCHED_NO_TASK; n++)
 		;
 	width = LCD_COLS / (n + 1);
 
+	for (i = 0; i < n; i++)
+		len += snprintk(line + len, sizeof(line) - len, "%*u", width,
+				sched_stack_free(i));
+	snprintk(line + len, sizeof(line) - len, "%*u", LCD_COLS - len,
+		 sched_stack_free(SCHED_IDLE_TASK));
+
+	/* line holds the figures; the label goes out first, from flash. */
 	if (lcd_set_cursor(0, 0) < 0 ||
-	    lcd_puts("stack free      ") < 0 ||
+	    lcd_puts_P(PSTR("stack free      ")) < 0 ||
 	    lcd_set_cursor(0, 1) < 0)
 		return -1;
-	for (i = 0; i < n; i++)
-		if (lcd_put_right(sched_stack_free(i), width) < 0)
-			return -1;
-	return lcd_put_right(sched_stack_free(SCHED_IDLE_TASK),
-			     LCD_COLS - n * width);
+	return lcd_puts(line);
+}
+
+/*
+ * The third page: line 0 the number and time of the newest kernel log
+ * record, line 1 its text.  Older records stay in the log unread.
+ */
+static int __attribute__((noinline)) lcd_show_log(void)
+{
+	struct log_record rec;
+	uint16_t seq = log_last(&rec);
+
+	if (!seq)
+		return lcd_print_at(0, 0, "log empty       ") < 0 ||
+		       lcd_print_at(0, 1, "%16s", "") < 0 ? -1 : 0;
+	if (lcd_print_at(0, 0, "log %-5u%5u s", seq, rec.secs) < 0)
+		return -1;
+	return lcd_print_at(0, 1, "%-16s", rec.text);
 }
 
 /*
@@ -119,20 +137,15 @@ static int lcd_show_stack(void)
  * fields are right-aligned so a shorter number overwrites a longer one.
  * @relabel rewrites the label on line 0, which the stack page covers.
  */
-static int lcd_show_status(uint32_t idle_ticks, uint32_t ticks, int relabel)
+static int __attribute__((noinline)) lcd_show_status(uint32_t idle_ticks, uint32_t ticks, int relabel)
 {
-	if (relabel && (lcd_set_cursor(0, 0) < 0 ||
-			lcd_puts("Leonix idle") < 0))
+	unsigned int idle = ticks ? idle_ticks * 100 / ticks : 0;
+
+	if (relabel && lcd_print_at(0, 0, "Leonix idle") < 0)
 		return -1;
-	if (lcd_set_cursor(LCD_COLS - 5, 0) < 0 ||
-	    lcd_put_right(ticks ? idle_ticks * 100 / ticks : 0, 4) < 0 ||
-	    lcd_puts("%") < 0 ||
-	    lcd_set_cursor(0, 1) < 0 ||
-	    lcd_puts("up") < 0 ||
-	    lcd_put_right(get_jiffies() / HZ, LCD_COLS - 4) < 0 ||
-	    lcd_puts(" s") < 0)
+	if (lcd_print_at(LCD_COLS - 5, 0, "%4u%%", idle) < 0)
 		return -1;
-	return 0;
+	return lcd_print_at(0, 1, "up%12lu s", get_jiffies() / HZ);
 }
 
 /*
@@ -150,20 +163,23 @@ static int lcd_show_status(uint32_t idle_ticks, uint32_t ticks, int relabel)
  * instead, by the expander's power-on state, and the display is
  * initialised again on the spot.
  *
- * Online, the display alternates every LCD_PAGE_UPDATES seconds between
- * the idle share with the uptime and the stack page.
+ * Online, the display steps every LCD_PAGE_UPDATES seconds through the
+ * idle share with the uptime, the stack page and the newest log record.
  */
 static void lcd_task(void)
 {
 	uint32_t now, next_update, next_retry, next_blink;
 	uint32_t last_jiffies, last_idle, idle_now;
 	uint8_t page_age = 0;
-	int online, stack_page = 0, err;
+	int online, err;
+	uint8_t page = 0;
 
 	PORTB |= 1 << PORTB0;
 	DDRB |= 1 << DDB0;
 
 	online = lcd_show_banner() == 0;
+	if (online)
+		printk("pcf8574 at %x", lcd_address());
 	last_jiffies = next_retry = next_blink = get_jiffies();
 	last_idle = sched_idle_ticks();
 	next_update = last_jiffies + HZ;
@@ -183,21 +199,28 @@ static void lcd_task(void)
 			}
 			if (++page_age == LCD_PAGE_UPDATES) {
 				page_age = 0;
-				stack_page = !stack_page;
+				if (++page == LCD_PAGES)
+					page = 0;
 			}
 			err = lcd_check();
 			if (err == 0) {
-				/* Replugged since the last refresh. */
+				printk("lcd replugged");
 				err = lcd_show_banner();
 				page_age = 0;
-				stack_page = 0;
+				page = 0;
 			}
-			if (err >= 0)
-				err = stack_page ? lcd_show_stack() :
-				      lcd_show_status(idle_now - last_idle,
-						      now - last_jiffies,
-						      page_age == 0);
+			if (err >= 0) {
+				if (page == 1)
+					err = lcd_show_stack();
+				else if (page == 2)
+					err = lcd_show_log();
+				else
+					err = lcd_show_status(idle_now - last_idle,
+							      now - last_jiffies,
+							      page_age == 0);
+			}
 			if (err < 0) {
+				printk("lcd offline");
 				online = 0;
 				next_retry = next_blink = get_jiffies();
 				continue;
@@ -215,8 +238,9 @@ static void lcd_task(void)
 		}
 		if (time_after_eq(now, next_retry)) {
 			if (lcd_show_banner() == 0) {
+				printk("lcd online");
 				online = 1;
-				stack_page = 0;
+				page = 0;
 				page_age = 0;
 				PORTB |= 1 << PORTB0;
 				last_jiffies = get_jiffies();
@@ -233,6 +257,7 @@ static void lcd_task(void)
 int main(void)
 {
 	time_init();
+	printk("Leonix booted");
 	task_create(blink_l, blink_l_stack, sizeof(blink_l_stack));
 	task_create(blink_tx, blink_tx_stack, sizeof(blink_tx_stack));
 	task_create(lcd_task, lcd_stack, sizeof(lcd_stack));

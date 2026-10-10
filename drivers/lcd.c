@@ -12,6 +12,7 @@
  * 100 kHz, which already exceeds the 37 us most instructions need
  * (HD44780U table 6).  Only clear needs an explicit wait.
  */
+#include <avr/pgmspace.h>
 #include <util/delay.h>
 
 #include <leonix/i2c.h>
@@ -163,6 +164,17 @@ int lcd_puts(const char *s)
 	return 0;
 }
 
+/* As lcd_puts(), for a string in flash. */
+int lcd_puts_P(const char *s)
+{
+	char c;
+
+	while ((c = pgm_read_byte(s++)))
+		if (lcd_write_byte((uint8_t)c, PCF_RS) < 0)
+			return -1;
+	return 0;
+}
+
 /*
  * Check that the display has kept the state lcd_init() gave it.
  *
@@ -188,4 +200,10 @@ int lcd_check(void)
 	if (i2c_read(pcf_addr, &port, 1) < 0)
 		return -1;
 	return !(port & (PCF_E | PCF_RW));
+}
+
+/* The I2C address lcd_init() found the expander at, 0 before that. */
+uint8_t lcd_address(void)
+{
+	return pcf_addr;
 }
