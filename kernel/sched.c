@@ -138,6 +138,19 @@ uint16_t sched_stack_free(uint8_t index)
 	return p - (t->stack + STACK_CANARY_SIZE);
 }
 
+/* The state of task @index, or SCHED_NO_STATE for an index with no task. */
+uint8_t sched_task_state(uint8_t index)
+{
+	uint8_t state;
+
+	if (index >= nr_tasks)
+		return SCHED_NO_STATE;
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+		state = tasks[index].state;
+	}
+	return state;
+}
+
 /* Returns 0, or -1 if the task table is full or @size is too small. */
 int task_create(void (*entry)(void), uint8_t *stack, uint16_t size)
 {
