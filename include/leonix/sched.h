@@ -24,7 +24,8 @@
 
 enum task_state {
 	TASK_RUNNABLE,
-	TASK_SLEEPING,
+	TASK_SLEEPING,		/* until wake_at, or until woken */
+	TASK_BLOCKED,		/* until woken, no deadline */
 	TASK_DEAD,
 };
 
