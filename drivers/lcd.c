@@ -201,3 +201,9 @@ int lcd_check(void)
 		return -1;
 	return !(port & (PCF_E | PCF_RW));
 }
+
+/* The I2C address lcd_init() found the expander at, 0 before that. */
+uint8_t lcd_address(void)
+{
+	return pcf_addr;
+}
