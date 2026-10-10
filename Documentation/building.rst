@@ -126,6 +126,10 @@ leonix.map
 ``make disasm``
   输出反汇编.
 
+``make check``
+  在开发机上编译并运行 lib/ 的测试, 不需要板子. 需要主机的 C 编译器,
+  默认为 ``cc``, 可用 HOSTCC 指定. 全部通过时最后一行为 ``all passed``.
+
 ``make clean``
   删除全部生成的文件.
 
