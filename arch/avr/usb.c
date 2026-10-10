@@ -5,8 +5,15 @@
  * The host enumerates the device through endpoint 0 and then opens the
  * port.  Endpoint 1 is the CDC notification endpoint, which the class
  * requires but which never sends; endpoint 2 receives what the host
- * writes and endpoint 3 is the way out.  What arrives on endpoint 2 is
- * dropped, so that a host writing to the port does not stall.
+ * writes and endpoint 3 is the way out.
+ *
+ * The data endpoints carry the terminal ttyACM0, see drivers/tty.c,
+ * which reads and writes them through acm_fops.  Bytes from the
+ * host wait in acm_rx_buf for acm_read(); a bank that does not fit is
+ * left in the controller, which then NAKs the host until a reader makes
+ * room.  acm_write() queues bytes in acm_tx_buf for usb_task() to send.
+ * Only usb_task() touches the endpoints, since UENUM is one selection
+ * shared by everyone.
  *
  * The port is the kernel log's console.  While the host holds DTR, which
  * a terminal program raises on open, each printk() record goes out as
@@ -36,8 +43,11 @@
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <avr/wdt.h>
+#include <util/atomic.h>
 #include <util/delay.h>
 
+#include <leonix/fs.h>
+#include <leonix/tty.h>
 #include <leonix/printk.h>
 #include <leonix/sched.h>
 #include <leonix/usb.h>
@@ -124,6 +134,24 @@
 #define USB_EV_SETUP		(1 << 0)
 #define USB_EV_RX		(1 << 1)
 
+/*
+ * Ring sizes, powers of two so that the free-running 8-bit indices wrap
+ * with them.  One producer and one consumer each, and an 8-bit index is
+ * read and written in one instruction, so the rings need no lock.
+ */
+#define ACM_RX_SIZE		32
+#define ACM_TX_SIZE		64
+
+/*
+ * A packet as long as wMaxPacketSize does not end a bulk transfer on its
+ * own, USB 2.0 5.8.3; the host may hold it until a short one follows.
+ * Sending at most one byte less makes every packet short.
+ */
+#define ACM_TX_PACKET		(CDC_DATA_SIZE - 1)
+
+_Static_assert(256 % ACM_RX_SIZE == 0 && 256 % ACM_TX_SIZE == 0,
+	       "ring sizes must divide the 8-bit index range");
+
 #define lo(w)	((w) & 0xff)
 #define hi(w)	((w) >> 8)
 
@@ -191,6 +219,15 @@ static uint16_t line_state;
 static uint8_t console_replay;	/* DTR has just risen */
 static uint16_t console_sent;	/* last record sent */
 static struct line_coding line = { 9600, 0, 0, 8 };
+
+static char acm_rx_buf[ACM_RX_SIZE];
+static volatile uint8_t acm_rx_head, acm_rx_tail;
+static volatile uint8_t acm_rx_held;	/* a bank waits for room */
+static struct wait_queue acm_rx_wq = WAIT_QUEUE_INIT;
+
+static char acm_tx_buf[ACM_TX_SIZE];
+static volatile uint8_t acm_tx_head, acm_tx_tail;
+static struct wait_queue acm_tx_wq = WAIT_QUEUE_INIT;
 
 /*
  * Wait for any flag in @mask on the selected endpoint.  Returns the
@@ -287,6 +324,7 @@ static void cdc_configure(void)
 		     (1 << ALLOC));
 	UERST = (1 << CDC_NOTIFY_EP) | (1 << CDC_RX_EP) | (1 << CDC_TX_EP);
 	UERST = 0;
+	acm_rx_held = 0;
 	UENUM = 0;
 }
 
@@ -430,14 +468,30 @@ static void ep0_setup(void)
 		ep0_stall();
 }
 
-/* What the host writes to the port is dropped, bank by bank. */
+/*
+ * Move what the host wrote into acm_rx_buf, datasheet 22.13.2.  A bank
+ * that does not fit stays in the controller with its interrupt masked;
+ * acm_read() asks for another pass once it has made room.
+ */
 static void cdc_rx(void)
 {
 	UENUM = CDC_RX_EP;
-	if (!(UEINTX & (1 << RXOUTI)))
-		return;
-	UEINTX = ~(1 << RXOUTI);
-	UEINTX = (uint8_t)~(1 << FIFOCON);
+	while (UEINTX & (1 << FIFOCON)) {
+		UEINTX = ~(1 << RXOUTI);
+		while (UEINTX & (1 << RWAL)) {
+			if ((uint8_t)(acm_rx_head - acm_rx_tail) == ACM_RX_SIZE) {
+				acm_rx_held = 1;
+				goto out;
+			}
+			acm_rx_buf[acm_rx_head % ACM_RX_SIZE] = UEDATX;
+			acm_rx_head++;
+		}
+		UEINTX = (uint8_t)~(1 << FIFOCON);
+	}
+	acm_rx_held = 0;
+	UEIENX = 1 << RXOUTE;
+out:
+	wake_up(&acm_rx_wq);
 }
 
 /*
@@ -526,6 +580,79 @@ static uint8_t console_pending(void)
 	return console_open() && (console_replay || console_sent != log_newest());
 }
 
+/*
+ * Send what acm_write() has queued, after any log records.  While the
+ * port is closed the bytes stay queued, so that the shell's prompt from
+ * boot appears once a terminal opens the port; a writer that fills the
+ * queue meanwhile waits for the next open.  If the host holds the port
+ * open but stops reading, the queue is dropped, so that a writer does
+ * not wait on a terminal that is gone.
+ */
+static void acm_flush(void)
+{
+	uint8_t n;
+
+	if (!console_open())
+		return;
+	UENUM = CDC_TX_EP;
+	while (acm_tx_head != acm_tx_tail) {
+		if (!ep_wait(1 << TXINI)) {
+			acm_tx_tail = acm_tx_head;
+			break;
+		}
+		UEINTX = ~(1 << TXINI);
+		for (n = 0; n < ACM_TX_PACKET && acm_tx_head != acm_tx_tail; n++) {
+			UEDATX = acm_tx_buf[acm_tx_tail % ACM_TX_SIZE];
+			acm_tx_tail++;
+		}
+		UEINTX = (uint8_t)~(1 << FIFOCON);
+		wake_up(&acm_tx_wq);
+	}
+	UENUM = 0;
+	wake_up(&acm_tx_wq);
+}
+
+static void usb_kick(uint8_t events)
+{
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+		usb_events |= events;
+	}
+	wake_up(&usb_wq);
+}
+
+static int acm_read(char *buf, uint8_t count)
+{
+	uint8_t n = 0;
+
+	wait_event(&acm_rx_wq, acm_rx_head != acm_rx_tail);
+	while (n < count && acm_rx_head != acm_rx_tail) {
+		buf[n++] = acm_rx_buf[acm_rx_tail % ACM_RX_SIZE];
+		acm_rx_tail++;
+	}
+	if (acm_rx_held)
+		usb_kick(USB_EV_RX);
+	return n;
+}
+
+static int acm_write(const char *buf, uint8_t count)
+{
+	uint8_t n;
+
+	for (n = 0; n < count; n++) {
+		wait_event(&acm_tx_wq,
+			   (uint8_t)(acm_tx_head - acm_tx_tail) != ACM_TX_SIZE);
+		acm_tx_buf[acm_tx_head % ACM_TX_SIZE] = buf[n];
+		acm_tx_head++;
+	}
+	usb_kick(0);
+	return count;
+}
+
+static const struct file_operations acm_fops = {
+	.read = acm_read,
+	.write = acm_write,
+};
+
 /* The console kick from printk(), possibly in an interrupt. */
 static void usb_console_kick(void)
 {
@@ -543,19 +670,19 @@ static void usb_task(void)
 
 	for (;;) {
 		wait_event(&usb_wq,
-			   (events = usb_take_events()) || console_pending());
+			   (events = usb_take_events()) || console_pending() ||
+			   (console_open() && acm_tx_head != acm_tx_tail));
 		if (events & USB_EV_SETUP) {
 			ep0_setup();
 			UENUM = 0;
 			UEIENX = 1 << RXSTPE;
 		}
-		if (events & USB_EV_RX) {
+		if (events & USB_EV_RX)
 			cdc_rx();
-			UEIENX = 1 << RXOUTE;
-		}
 		UENUM = 0;
 		if (console_open())
 			console_flush();
+		acm_flush();
 	}
 }
 
@@ -615,6 +742,7 @@ int usb_init(void)
 	if (task_create(usb_task, usb_task_stack, sizeof(usb_task_stack)) < 0)
 		return -1;
 	register_console(usb_console_kick);
+	tty_register(PSTR("ttyACM0"), &acm_fops);
 
 	UHWCON = 1 << UVREGE;
 	USBCON = (1 << USBE) | (1 << FRZCLK);
