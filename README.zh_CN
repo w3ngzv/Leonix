@@ -4,8 +4,8 @@ Leonix
 Leonix 是运行在 Arduino Leonardo (ATmega32U4) 上的内核, 用 C 与 AVR 汇编
 编写, 由 avr-gcc 编译, 不使用 Arduino core 及其任何库.
 
-板子设计为独立运行, 由圆口电源插座或 VIN 供电, 不连接主机. USB 口只用于
-烧录.
+板子设计为独立运行, 由圆口电源插座或 VIN 供电. 连接电脑时, USB 口是一个
+CDC-ACM 串口, 传送内核日志, 烧录也不必按复位键.
 
 英文版见 README.
 
@@ -16,14 +16,21 @@ Leonix 是运行在 Arduino Leonardo (ATmega32U4) 上的内核, 用 C 与 AVR �
 Timer1 产生的 1 ms 节拍驱动抢占式轮转调度器. 任务以睡眠代替忙等, 没有任务
 可运行时, 空闲任务使 CPU 进入 Idle 模式. main() 建立三个任务: 两个分别让
 L 与 TX 两个 LED 闪烁, 第三个经 PCF8574 I2C 背板驱动 HD44780 液晶屏, 显示
-运行时间与 CPU 的空闲程度, 背板拔下再插回后重新初始化液晶屏.
+运行时间与 CPU 的空闲程度, 背板拔下再插回后重新初始化液晶屏. 第四个任务
+负责 USB 设备.
 
-以上功能均已在板子上运行. 液晶屏每秒刷新一次时, 显示的空闲比例约为 98%.
+printk() 保留最近 16 条消息. 打开串口时先回放这些消息, 之后实时输出新的
+消息:
+
+	cat /dev/cu.usbmodemXXXX
+
+以上功能均已在板子上运行. 液晶屏每秒刷新一次时, 显示的空闲比例为 99%.
 
 	make
 	make flash PORT=/dev/cu.usbmodemXXXX
 
-需要先按下复位键, 串口只在 bootloader 等待期间存在.
+Leonix 运行时, make flash 自行使板子复位进入 bootloader. 板上是旧映像时,
+需要先按下复位键.
 
 
 硬件
@@ -46,8 +53,8 @@ L 与 TX 两个 LED 闪烁, 第三个经 PCF8574 I2C 背板驱动 HD44780 液晶
 运行过. Windows 尚未测试. 各系统的安装命令与串口名见
 Documentation/building.rst.
 
-Leonix 没有 USB CDC 端口, 无法接收 1200 波特率复位, 所以只能按下复位键
-进入 Caterina bootloader. 详见 Documentation/booting.rst 第 5 节.
+make flash 以 1200 波特率打开并关闭串口, 使板子进入 Caterina bootloader,
+做法与 Arduino core 相同. 详见 Documentation/notes/usb.rst.
 
 
 文档
@@ -62,7 +69,8 @@ Documentation/booting.rst
 	复原的部分.
 
 Documentation/notes/index.rst
-	AVR 架构本身、启动代码、引脚、系统节拍、调度器与 I2C 液晶屏的设计思考, 面向初次接触内核开发的读者.
+	AVR 架构本身、启动代码、引脚、系统节拍、调度器、I2C 液晶屏、内核日志
+	与 USB 串口的设计思考, 面向初次接触内核开发的读者.
 	按其中列出的顺序阅读.
 
 Documentation/references/index.rst
@@ -84,6 +92,12 @@ Documentation/references/index.rst
 	  https://www.nxp.com/docs/en/user-guide/UM10204.pdf
 	curl -L -o AVR-C-Compiler-CoDesign-Myklebust.pdf \
 	  https://ic.unicamp.br/~celio/mc404-2004/Atmel_AVR/C_compiler.pdf
+
+USB 规范以压缩包发布, 应从每个压缩包中取出哪个文件, 见
+Documentation/references/index.rst:
+
+	curl -L -O https://www.usb.org/sites/default/files/usb_20_20240604.zip
+	curl -L -O https://www.usb.org/sites/default/files/CDC1.2_WMC1.1_012011.zip
 
 .gitignore 不包含这些文件. 请把它们的文件名加入 .git/info/exclude,
 以免误提交.

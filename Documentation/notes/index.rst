@@ -22,3 +22,4 @@
    scheduler
    lcd
    printk
+   usb

@@ -164,17 +164,6 @@ int lcd_puts(const char *s)
 	return 0;
 }
 
-/* As lcd_puts(), for a string in flash. */
-int lcd_puts_P(const char *s)
-{
-	char c;
-
-	while ((c = pgm_read_byte(s++)))
-		if (lcd_write_byte((uint8_t)c, PCF_RS) < 0)
-			return -1;
-	return 0;
-}
-
 /*
  * Check that the display has kept the state lcd_init() gave it.
  *
