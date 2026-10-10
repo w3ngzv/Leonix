@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * TWI master, transmit only, polled.
+ * TWI master, transmit only.
  *
- * Only one task may use the bus; there is no locking.  i2c_write() waits
- * on jiffies for its timeout, so it must run with the tick going, that
- * is from a task and not from main() before sched_start().
+ * i2c_write() hands a transfer to the TWI interrupt and sleeps until the
+ * interrupt reports it done, so the CPU is free while the bytes go out.
+ * A mutex serialises callers.  Only a task may call it, after
+ * sched_start().
+ *
+ * panic() runs with interrupts off, so there the transfer is polled
+ * instead, see i2c_write_polled().
  *
  * SDA is PD1 and SCL is PD0, D2 and D3 on the Leonardo header.
  *
@@ -18,6 +22,7 @@
 
 #include <leonix/i2c.h>
 #include <leonix/jiffies.h>
+#include <leonix/mutex.h>
 #include <leonix/panic.h>
 
 /* PCF8574 is a standard-mode part, 100 kHz at most. */
@@ -193,12 +198,11 @@ static void i2c_stop(void)
 }
 
 /*
- * Send @len bytes to the 7-bit address @addr.  @len may be 0, which
- * only checks that a device answers at @addr.
- *
- * Returns 0, or -1 on NACK, lost arbitration or timeout.
+ * The polled transfer, for panic() only: interrupts are off there and
+ * the scheduler must not be entered.  Same arguments and result as
+ * i2c_write().
  */
-int i2c_write(uint8_t addr, const uint8_t *buf, uint8_t len)
+static int i2c_write_polled(uint8_t addr, const uint8_t *buf, uint8_t len)
 {
 	TWCR = (1 << TWINT) | (1 << TWSTA) | (1 << TWEN);
 	if (i2c_wait() != TW_START)
@@ -230,4 +234,107 @@ fail:
 	else
 		i2c_reset();
 	return -1;
+}
+
+/*
+ * The transfer in progress.  status stays I2C_BUSY until the interrupt
+ * has put a STOP on the bus or met an error.
+ */
+#define I2C_BUSY	1
+#define I2C_DONE	0
+#define I2C_FAILED	(-1)
+
+static struct {
+	uint8_t sla_w;
+	const uint8_t *buf;
+	uint8_t len;
+	volatile int8_t status;
+} xfer;
+
+static struct wait_queue xfer_wq = WAIT_QUEUE_INIT;
+static struct mutex bus_lock = MUTEX_INIT;
+
+#define TWCR_GO		((1 << TWINT) | (1 << TWEN) | (1 << TWIE))
+
+/*
+ * One step of the transfer per TWINT, called from the TWI vector in
+ * switch.S with interrupts off.  Returns the number of tasks woken, so
+ * the vector knows whether to switch.
+ */
+uint8_t twi_interrupt(void)
+{
+	switch (TW_STATUS) {
+	case TW_START:
+		TWDR = xfer.sla_w;
+		TWCR = TWCR_GO;
+		return 0;
+	case TW_MT_SLA_ACK:
+	case TW_MT_DATA_ACK:
+		if (xfer.len) {
+			TWDR = *xfer.buf++;
+			xfer.len--;
+			TWCR = TWCR_GO;
+			return 0;
+		}
+		TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN);
+		xfer.status = I2C_DONE;
+		break;
+	case TW_MT_ARB_LOST:
+		/* Another master owns the bus; a STOP is not ours to send. */
+		TWCR = (1 << TWINT) | (1 << TWEN);
+		xfer.status = I2C_FAILED;
+		break;
+	default:
+		/* NACK, or a bus error: release the bus. */
+		TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN);
+		xfer.status = I2C_FAILED;
+		break;
+	}
+	return wake_up(&xfer_wq);
+}
+
+/*
+ * Send @len bytes to the 7-bit address @addr.  @len may be 0, which
+ * only checks that a device answers at @addr.
+ *
+ * Returns 0, or -1 on NACK, lost arbitration or timeout.  After a
+ * timeout the bus is reset; the interrupt may still fire once more, but
+ * by then no task waits on xfer_wq and the wake is lost harmlessly.
+ */
+int i2c_write(uint8_t addr, const uint8_t *buf, uint8_t len)
+{
+	struct i2c_deadline stop;
+	int timed_out;
+
+	if (oops_in_progress)
+		return i2c_write_polled(addr, buf, len);
+
+	mutex_lock(&bus_lock);
+
+	/* The previous transfer's STOP may still be going out. */
+	i2c_deadline_start(&stop);
+	while (TWCR & (1 << TWSTO))
+		if (i2c_timed_out(&stop, 1 << TWSTO, 1 << TWSTO)) {
+			i2c_reset();
+			break;
+		}
+
+	xfer.sla_w = (uint8_t)(addr << 1) | TW_WRITE;
+	xfer.buf = buf;
+	xfer.len = len;
+	xfer.status = I2C_BUSY;
+	TWCR = TWCR_GO | (1 << TWSTA);
+
+	/* Each byte takes 90 us at 100 kHz; allow a full millisecond each. */
+	timed_out = wait_event_timeout(&xfer_wq, xfer.status != I2C_BUSY,
+				       I2C_TIMEOUT_MS + len);
+	if (timed_out || xfer.status == I2C_FAILED) {
+		if (timed_out)
+			i2c_reset();
+		mutex_unlock(&bus_lock);
+		return -1;
+	}
+
+	mutex_unlock(&bus_lock);
+	return 0;
 }
