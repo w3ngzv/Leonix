@@ -240,6 +240,8 @@ void sleep_until(uint32_t deadline)
  * interrupts enabled and the task off @wq, since a later wake_up() on
  * @wq must not end some other sleep of this task.
  */
+_Static_assert(MAX_TASKS <= 8, "struct wait_queue holds one bit per task in a byte");
+
 void __wait(struct wait_queue *wq, uint32_t deadline, uint8_t timed)
 {
 	uint8_t bit = 1 << current_index;
