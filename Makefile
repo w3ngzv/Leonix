@@ -7,7 +7,7 @@ TARGET   := leonix
 APP_FLASH_SIZE := 28672
 
 OBJS := arch/avr/start.o arch/avr/switch.o arch/avr/time.o arch/avr/i2c.o \
-	arch/avr/panic.o kernel/sched.o kernel/printk.o drivers/lcd.o \
+	arch/avr/usb.o arch/avr/panic.o kernel/sched.o kernel/printk.o drivers/lcd.o \
 	lib/vsprintf.o init/main.o
 
 CC      := avr-gcc

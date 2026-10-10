@@ -7,6 +7,7 @@
 #include <leonix/lcd.h>
 #include <leonix/printk.h>
 #include <leonix/sched.h>
+#include <leonix/usb.h>
 
 /*
  * Sized from what sched_stack_free() reads on the board, with the
@@ -261,5 +262,7 @@ int main(void)
 	task_create(blink_l, blink_l_stack, sizeof(blink_l_stack));
 	task_create(blink_tx, blink_tx_stack, sizeof(blink_tx_stack));
 	task_create(lcd_task, lcd_stack, sizeof(lcd_stack));
+	if (usb_init() < 0)
+		printk("usb init failed");
 	sched_start();
 }
