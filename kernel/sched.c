@@ -26,6 +26,16 @@
 #define STACK_CANARY_LO	0xac
 #define STACK_CANARY_HI	0x57
 
+/*
+ * Every stack byte above the canary starts out as STACK_FILL, so the
+ * lowest byte that no longer holds it marks the deepest the stack has
+ * been.  0x00 would be the obvious value, but the switch frame pushes
+ * r1, which is always 0, and many registers are 0 as well; 0xa5 is
+ * rarer, though a pushed 0xa5 can still make the count err high.
+ */
+#define STACK_FILL	0xa5
+#define STACK_CANARY_SIZE	2
+
 #define IDLE_STACK_SIZE	72
 
 /* idle() itself needs task_exit()'s return address and a 2-byte frame. */
@@ -72,7 +82,11 @@ static void task_init(struct task *t, void (*entry)(void),
 	uint16_t exit_pc = (uint16_t)task_exit;
 	uint16_t entry_pc = (uint16_t)entry;
 	uint8_t *sp = stack + size - 1;
+	uint16_t n;
 	uint8_t i;
+
+	for (n = STACK_CANARY_SIZE; n < size; n++)
+		stack[n] = STACK_FILL;
 
 	*sp-- = exit_pc & 0xff;
 	*sp-- = exit_pc >> 8;
@@ -94,6 +108,33 @@ static void task_init(struct task *t, void (*entry)(void),
 	t->sp = sp;
 	t->stack = stack;
 	t->state = TASK_RUNNABLE;
+}
+
+/*
+ * Bytes above the canary of task @index's stack that have never been
+ * written, or of the idle task's for SCHED_IDLE_TASK.  Returns
+ * SCHED_NO_TASK for an index with no task.
+ *
+ * The scan stops at the first byte that differs from STACK_FILL, at the
+ * latest at the initial frame near the top.  It reads a stack that may
+ * be in use, which is harmless: the result can only be a few bytes
+ * stale.
+ */
+uint16_t sched_stack_free(uint8_t index)
+{
+	const struct task *t;
+	const uint8_t *p;
+
+	if (index == SCHED_IDLE_TASK)
+		t = &idle_task;
+	else if (index < nr_tasks)
+		t = &tasks[index];
+	else
+		return SCHED_NO_TASK;
+
+	for (p = t->stack + STACK_CANARY_SIZE; *p == STACK_FILL; p++)
+		;
+	return p - (t->stack + STACK_CANARY_SIZE);
 }
 
 /* Returns 0, or -1 if the task table is full or @size is too small. */
