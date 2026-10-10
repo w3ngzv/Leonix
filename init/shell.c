@@ -15,6 +15,7 @@
 
 #include <leonix/jiffies.h>
 #include <leonix/kernel.h>
+#include <leonix/lxfs.h>
 #include <leonix/printk.h>
 #include <leonix/sched.h>
 #include <leonix/shell.h>
@@ -101,11 +102,77 @@ static void cmd_ls(const char *path)
 	close(fd);
 }
 
+/* Copy file @path to standard output. */
+static void cmd_cat(const char *path)
+{
+	char buf[TTY_LINE];
+	int fd, n;
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		sh_printf("cat: %s: error %d\n", path, -fd);
+		return;
+	}
+	while ((n = read(fd, buf, sizeof(buf))) > 0)
+		write(STDOUT_FILENO, buf, n);
+	if (n < 0)
+		sh_printf("cat: %s: error %d\n", path, -n);
+	close(fd);
+}
+
+/*
+ * Write @arg and a newline to standard output, or with "> file" or
+ * ">> file" at the end, to that file, created if need be and emptied or
+ * appended to.
+ */
+static void cmd_echo(char *arg)
+{
+	char *redir = strchr(arg, '>');
+	uint16_t flags = O_WRONLY | O_CREAT | O_TRUNC;
+	char *end;
+	int fd = STDOUT_FILENO;
+
+	if (redir) {
+		end = redir;
+		*redir++ = '\0';
+		if (*redir == '>') {
+			flags = O_WRONLY | O_CREAT | O_APPEND;
+			redir++;
+		}
+		while (*redir == ' ')
+			redir++;
+		while (end > arg && end[-1] == ' ')
+			*--end = '\0';
+		fd = open(redir, flags);
+		if (fd < 0) {
+			sh_printf("echo: %s: error %d\n", redir, -fd);
+			return;
+		}
+	}
+	write(fd, arg, strlen(arg));
+	write(fd, "\n", 1);
+	if (fd != STDOUT_FILENO)
+		close(fd);
+}
+
+static void cmd_rm(const char *path)
+{
+	int err = unlink(path);
+
+	if (err < 0)
+		sh_printf("rm: %s: error %d\n", path, -err);
+}
+
+static void cmd_df(void)
+{
+	sh_printf("%u bytes free\n", lxfs_free());
+}
+
 /* @cmd is the first word of the line, @arg the rest, possibly empty. */
-static void run(const char *cmd, const char *arg)
+static void run(const char *cmd, char *arg)
 {
 	if (!strcmp_P(cmd, PSTR("help")))
-		sh_printf("help ps dmesg uptime ls\n");
+		sh_printf("help ps dmesg uptime ls cat echo rm df\n");
 	else if (!strcmp_P(cmd, PSTR("ps")))
 		cmd_ps();
 	else if (!strcmp_P(cmd, PSTR("dmesg")))
@@ -114,6 +181,14 @@ static void run(const char *cmd, const char *arg)
 		cmd_uptime();
 	else if (!strcmp_P(cmd, PSTR("ls")))
 		cmd_ls(arg);
+	else if (!strcmp_P(cmd, PSTR("cat")))
+		cmd_cat(arg);
+	else if (!strcmp_P(cmd, PSTR("echo")))
+		cmd_echo(arg);
+	else if (!strcmp_P(cmd, PSTR("rm")))
+		cmd_rm(arg);
+	else if (!strcmp_P(cmd, PSTR("df")))
+		cmd_df();
 	else
 		sh_printf("%s: not found\n", cmd);
 }
@@ -134,7 +209,7 @@ static void shell_task(void)
 		arg = strchr(line, ' ');
 		if (arg)
 			*arg++ = '\0';
-		run(line, arg ? arg : "");
+		run(line, arg ? arg : line + len - 1);
 	}
 }
 
