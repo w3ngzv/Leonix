@@ -4,11 +4,12 @@
 
 #include <stdint.h>
 
-#define MAX_TASKS	4
+#define MAX_TASKS	5
 
 /* sched_stack_free() arguments and result outside the task table. */
 #define SCHED_IDLE_TASK	0xff
 #define SCHED_NO_TASK	0xffff
+#define SCHED_NO_STATE	0xff
 
 /*
  * Bytes a task stack must hold beyond the task's own use.  Both ways
@@ -46,5 +47,6 @@ void sleep_until(uint32_t deadline);
 void msleep(uint16_t ms);
 uint32_t sched_idle_ticks(void);
 uint16_t sched_stack_free(uint8_t index);
+uint8_t sched_task_state(uint8_t index);
 
 #endif /* _LEONIX_SCHED_H */

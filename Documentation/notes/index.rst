@@ -23,3 +23,4 @@
    lcd
    printk
    usb
+   shell
