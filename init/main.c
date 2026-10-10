@@ -5,8 +5,13 @@
 #include <leonix/lcd.h>
 #include <leonix/sched.h>
 
-#define TASK_STACK_SIZE		128
-#define LCD_TASK_STACK_SIZE	192
+/*
+ * Sized from what sched_stack_free() reads on the board, with the
+ * measurements in Documentation/notes/scheduler.rst.  Recheck them on
+ * the stack page after any change to a task.
+ */
+#define TASK_STACK_SIZE		96
+#define LCD_TASK_STACK_SIZE	224
 #define TX_BLINK_HALF_PERIOD	(HZ / 8)
 #define RX_ERROR_HALF_PERIOD	(HZ / 20)
 #define LCD_RETRY_INTERVAL	(HZ / 2)
