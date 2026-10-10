@@ -24,8 +24,7 @@ printk() 保留最近 16 条消息. 打开串口时先回放这些消息, 之后
 
 	cat /dev/cu.usbmodemXXXX
 
-以上功能均已在板子上运行. 液晶屏每秒刷新一次时, 加入 USB 任务之前显示的
-空闲比例为 99%.
+以上功能均已在板子上运行. 液晶屏每秒刷新一次时, 显示的空闲比例为 99%.
 
 	make
 	make flash PORT=/dev/cu.usbmodemXXXX

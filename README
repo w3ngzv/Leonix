@@ -30,7 +30,7 @@ them and then follows new ones:
 	cat /dev/cu.usbmodemXXXX
 
 All of this runs on the board.  With the LCD refreshed once a second
-the display read 99% idle before the USB task was added.
+the display reads 99% idle.
 
 	make
 	make flash PORT=/dev/cu.usbmodemXXXX
