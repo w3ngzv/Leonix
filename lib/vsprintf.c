@@ -4,8 +4,9 @@
  *
  * Conversions: %c %s %S %d %u %x %%.  %S takes a string in flash.  An
  * optional 0 flag and a width pad numbers and strings on the left, with
- * zeros or spaces; l before d, u or x takes a 32-bit argument, since int
- * is 16 bits here.  Anything else in a conversion is copied as it is.
+ * zeros or spaces; a width of * is taken from an int argument, as in C.
+ * l before d, u or x takes a 32-bit argument, since int is 16 bits here.
+ * Anything else in a conversion is copied as it is.
  *
  * Output is cut at @size - 1 characters and always terminated.
  */
@@ -98,6 +99,10 @@ uint8_t vsnprintk_P(char *buf, uint8_t size, const char *fmt, va_list ap)
 		c = pgm_read_byte(fmt++);
 		if (c == '0') {
 			padc = '0';
+			c = pgm_read_byte(fmt++);
+		}
+		if (c == '*') {
+			width = (uint8_t)va_arg(ap, int);
 			c = pgm_read_byte(fmt++);
 		}
 		while (c >= '0' && c <= '9') {
