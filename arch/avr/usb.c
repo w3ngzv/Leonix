@@ -5,9 +5,13 @@
  * The host enumerates the device through endpoint 0 and then opens the
  * port.  Endpoint 1 is the CDC notification endpoint, which the class
  * requires but which never sends; endpoint 2 receives what the host
- * writes and endpoint 3 is the way out.  Nothing is sent yet, and what
- * arrives on endpoint 2 is dropped, so that a host writing to the port
- * does not stall.
+ * writes and endpoint 3 is the way out.  What arrives on endpoint 2 is
+ * dropped, so that a host writing to the port does not stall.
+ *
+ * The port is the kernel log's console.  While the host holds DTR, which
+ * a terminal program raises on open, each printk() record goes out as
+ * one line.  Opening the port first replays whatever records the log
+ * still holds.
  *
  * The endpoint interrupt only masks itself and wakes usb_task(), which
  * serves the request, the way the TWI interrupt hands an I2C transfer
@@ -53,11 +57,12 @@
 #define USB_SPIN_US		10
 
 /*
- * avr-gcc 9.5.0 -fstack-usage: usb_task() 16 bytes with the request
- * handlers inlined, then printk() 82, plus TASK_STACK_RESERVE.  About
- * 20 bytes are left over, until the stack page has measured it.
+ * avr-gcc 9.5.0 -fstack-usage puts the deepest path at console_flush()
+ * formatting a number: usb_task() 16, console_flush() 66, snprintk_P()
+ * 4, vsnprintk_P() 22, put_number() 34, put() 2, 144 bytes in all.  The
+ * switch frame and the canary bring it to 201.
  */
-#define USB_TASK_STACK_SIZE	176
+#define USB_TASK_STACK_SIZE	224
 
 /* bmRequestType */
 #define REQ_TYPE_MASK		0x60
@@ -93,6 +98,12 @@
 #define EP_INTERRUPT		3
 #define CDC_NOTIFY_INTERVAL_MS	64
 #define LANG_EN_US		0x0409
+
+/* CDC PSTN 1.2 table 18: DTR, set while the host has the port open. */
+#define CDC_LINE_DTR		(1 << 0)
+
+/* "[secs] text\r\n", one console line. */
+#define CONSOLE_LINE		(LOG_TEXT + 12)
 
 /* Events from the endpoint interrupt to usb_task(). */
 #define USB_EV_SETUP		(1 << 0)
@@ -162,6 +173,8 @@ static volatile uint8_t usb_events;
 
 static uint8_t usb_config;
 static uint16_t line_state;
+static uint8_t console_replay;	/* DTR has just risen */
+static uint16_t console_sent;	/* last record sent */
 static struct line_coding line = { 9600, 0, 0, 8 };
 
 /*
@@ -357,6 +370,8 @@ static void class_request(const struct setup_packet *setup)
 		ep0_send(p, sizeof(line), setup->length, 0);
 		break;
 	case CDC_SET_CONTROL_LINE_STATE:
+		if (setup->value & ~line_state & CDC_LINE_DTR)
+			console_replay = 1;
 		line_state = setup->value;
 		ep0_ack();
 		break;
@@ -398,6 +413,78 @@ static void cdc_rx(void)
 	UEINTX = (uint8_t)~(1 << FIFOCON);
 }
 
+/*
+ * Send @len bytes as one packet on the data IN endpoint.  Returns -1 if
+ * the bank stays full, which happens when nothing on the host reads the
+ * port.  @len is at most CDC_DATA_SIZE.
+ */
+static int cdc_write(const char *s, uint8_t len)
+{
+	int ret = -1;
+
+	UENUM = CDC_TX_EP;
+	if (ep_wait(1 << TXINI)) {
+		UEINTX = ~(1 << TXINI);
+		while (len--)
+			UEDATX = *s++;
+		UEINTX = (uint8_t)~(1 << FIFOCON);
+		ret = 0;
+	}
+	UENUM = 0;
+	return ret;
+}
+
+static uint8_t console_open(void)
+{
+	return usb_config && (line_state & CDC_LINE_DTR);
+}
+
+/*
+ * Send the records after console_sent.  On open, start from the oldest
+ * record still in the log and say how many came before it.  A record
+ * overwritten before it could be sent is counted the same way.  If the
+ * host stops reading, the rest are dropped rather than retried, so that
+ * a stalled port costs one timeout per record and no more.
+ *
+ * Kept out of line, so that its line buffer and record are not in
+ * usb_task()'s frame under the printk() in standard_request().
+ */
+static void __attribute__((noinline)) console_flush(void)
+{
+	struct log_record rec;
+	char line[CONSOLE_LINE];
+	uint16_t newest = log_newest();
+	uint16_t lost = 0;
+	uint8_t len;
+
+	if (console_replay) {
+		console_replay = 0;
+		console_sent = newest > LOG_RECORDS ? newest - LOG_RECORDS : 0;
+		lost = console_sent;
+	}
+	while (console_sent != newest) {
+		if (log_read(++console_sent, &rec) < 0) {
+			lost++;
+			continue;
+		}
+		if (lost) {
+			len = snprintk(line, sizeof(line), "(%u lost)\r\n", lost);
+			lost = 0;
+			if (cdc_write(line, len) < 0)
+				break;
+		}
+		len = snprintk(line, sizeof(line), "[%5u] %s\r\n", rec.secs,
+			       rec.text);
+		if (cdc_write(line, len) < 0)
+			break;
+	}
+	if (lost) {
+		len = snprintk(line, sizeof(line), "(%u lost)\r\n", lost);
+		cdc_write(line, len);
+	}
+	console_sent = newest;
+}
+
 /* Taken in wait_event(), with interrupts off. */
 static uint8_t usb_take_events(void)
 {
@@ -405,6 +492,17 @@ static uint8_t usb_take_events(void)
 
 	usb_events = 0;
 	return events;
+}
+
+static uint8_t console_pending(void)
+{
+	return console_open() && (console_replay || console_sent != log_newest());
+}
+
+/* The console kick from printk(), possibly in an interrupt. */
+static void usb_console_kick(void)
+{
+	wake_up(&usb_wq);
 }
 
 /*
@@ -417,7 +515,8 @@ static void usb_task(void)
 	uint8_t events;
 
 	for (;;) {
-		wait_event(&usb_wq, (events = usb_take_events()));
+		wait_event(&usb_wq,
+			   (events = usb_take_events()) || console_pending());
 		if (events & USB_EV_SETUP) {
 			ep0_setup();
 			UENUM = 0;
@@ -428,6 +527,8 @@ static void usb_task(void)
 			UEIENX = 1 << RXOUTE;
 		}
 		UENUM = 0;
+		if (console_open())
+			console_flush();
 	}
 }
 
@@ -486,6 +587,7 @@ int usb_init(void)
 
 	if (task_create(usb_task, usb_task_stack, sizeof(usb_task_stack)) < 0)
 		return -1;
+	register_console(usb_console_kick);
 
 	UHWCON = 1 << UVREGE;
 	USBCON = (1 << USBE) | (1 << FRZCLK);
