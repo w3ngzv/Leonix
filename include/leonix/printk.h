@@ -11,8 +11,11 @@
  * the seconds since boot.  A message is cut to LOG_TEXT - 1 characters,
  * which with the stamp makes a 16-byte record.  The length was chosen
  * for a row of the LCD, which no longer shows the log.
+ *
+ * Sixteen records hold everything written in the first seconds after
+ * boot, before a terminal on the USB console is likely to be open.
  */
-#define LOG_RECORDS	4
+#define LOG_RECORDS	16
 #define LOG_TEXT	14
 
 struct log_record {
