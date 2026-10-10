@@ -2,6 +2,7 @@
 #include <avr/io.h>
 #include <util/atomic.h>
 
+#include <leonix/eeprom.h>
 #include <leonix/jiffies.h>
 #include <leonix/kernel.h>
 #include <leonix/lcd.h>
@@ -225,6 +226,8 @@ int main(void)
 {
 	time_init();
 	printk("Leonix booted");
+	if (eeprom_fs_init())
+		printk("mkfs lxfs");
 	task_create(blink_l, blink_l_stack, sizeof(blink_l_stack));
 	task_create(blink_tx, blink_tx_stack, sizeof(blink_tx_stack));
 	task_create(lcd_task, lcd_stack, sizeof(lcd_stack));
