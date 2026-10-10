@@ -11,20 +11,22 @@
  */
 #include <avr/io.h>
 
+#include <leonix/kernel.h>
 #include <leonix/lcd.h>
 #include <leonix/panic.h>
 
 volatile uint8_t oops_in_progress;
 
+/* Names in flash, printed with %S. */
 static const char *reason_name(uint8_t reason)
 {
 	switch (reason) {
 	case PANIC_STACK_OVERFLOW:
-		return "stack";
+		return PSTR("stack");
 	case PANIC_BAD_INTERRUPT:
-		return "bad irq";
+		return PSTR("bad irq");
 	default:
-		return "?";
+		return PSTR("?");
 	}
 }
 
@@ -35,20 +37,23 @@ static const char *reason_name(uint8_t reason)
  */
 static void panic_show(uint8_t reason, uint8_t task)
 {
-	char task_name[2] = { '0' + task, '\0' };
+	char line[LCD_COLS + 1];
 
-	if (lcd_init() < 0 ||
-	    lcd_puts("PANIC ") < 0 ||
-	    lcd_puts(reason_name(reason)) < 0 ||
-	    lcd_set_cursor(0, 1) < 0 ||
-	    lcd_puts("task ") < 0)
+	if (lcd_init() < 0)
 		return;
+	snprintk(line, sizeof(line), "PANIC %S", reason_name(reason));
+	if (lcd_puts(line) < 0)
+		return;
+
 	if (task == PANIC_IDLE_TASK)
-		lcd_puts("idle");
+		snprintk(line, sizeof(line), "task idle");
 	else if (task == PANIC_NO_TASK)
-		lcd_puts("-");
+		snprintk(line, sizeof(line), "task -");
 	else
-		lcd_puts(task_name);
+		snprintk(line, sizeof(line), "task %u", task);
+	if (lcd_set_cursor(0, 1) < 0)
+		return;
+	lcd_puts(line);
 }
 
 /*

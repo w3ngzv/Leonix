@@ -12,6 +12,7 @@
  * 100 kHz, which already exceeds the 37 us most instructions need
  * (HD44780U table 6).  Only clear needs an explicit wait.
  */
+#include <avr/pgmspace.h>
 #include <util/delay.h>
 
 #include <leonix/i2c.h>
@@ -159,6 +160,17 @@ int lcd_puts(const char *s)
 {
 	while (*s)
 		if (lcd_write_byte((uint8_t)*s++, PCF_RS) < 0)
+			return -1;
+	return 0;
+}
+
+/* As lcd_puts(), for a string in flash. */
+int lcd_puts_P(const char *s)
+{
+	char c;
+
+	while ((c = pgm_read_byte(s++)))
+		if (lcd_write_byte((uint8_t)c, PCF_RS) < 0)
 			return -1;
 	return 0;
 }
