@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * TWI master, transmit only.
+ * TWI master.
  *
- * i2c_write() hands a transfer to the TWI interrupt and sleeps until the
- * interrupt reports it done, so the CPU is free while the bytes go out.
- * A mutex serialises callers.  Only a task may call it, after
- * sched_start().
+ * i2c_write() and i2c_read() hand a transfer to the TWI interrupt and
+ * sleep until the interrupt reports it done, so the CPU is free while
+ * the bytes go out.  A mutex serialises callers.  Only a task may call
+ * them, after sched_start().
  *
- * panic() runs with interrupts off, so there the transfer is polled
- * instead, see i2c_write_polled().
+ * panic() runs with interrupts off, so there writes are polled instead,
+ * see i2c_write_polled().
  *
  * SDA is PD1 and SCL is PD0, D2 and D3 on the Leonardo header.
  *
@@ -238,15 +238,16 @@ fail:
 
 /*
  * The transfer in progress.  status stays I2C_BUSY until the interrupt
- * has put a STOP on the bus or met an error.
+ * has put a STOP on the bus or met an error.  sla carries the R/W bit,
+ * which selects whether buf is sent or filled.
  */
 #define I2C_BUSY	1
 #define I2C_DONE	0
 #define I2C_FAILED	(-1)
 
 static struct {
-	uint8_t sla_w;
-	const uint8_t *buf;
+	uint8_t sla;
+	uint8_t *buf;
 	uint8_t len;
 	volatile int8_t status;
 } xfer;
@@ -255,17 +256,25 @@ static struct wait_queue xfer_wq = WAIT_QUEUE_INIT;
 static struct mutex bus_lock = MUTEX_INIT;
 
 #define TWCR_GO		((1 << TWINT) | (1 << TWEN) | (1 << TWIE))
+#define TWCR_STOP	((1 << TWINT) | (1 << TWSTO) | (1 << TWEN))
+
+/* Acknowledge every byte but the last, so the slave stops sending. */
+static void twi_receive_next(void)
+{
+	TWCR = xfer.len > 1 ? TWCR_GO | (1 << TWEA) : TWCR_GO;
+}
 
 /*
  * One step of the transfer per TWINT, called from the TWI vector in
  * switch.S with interrupts off.  Returns the number of tasks woken, so
- * the vector knows whether to switch.
+ * the vector knows whether to switch.  Status codes are those of the
+ * datasheet, tables 20-2 and 20-3.
  */
 uint8_t twi_interrupt(void)
 {
 	switch (TW_STATUS) {
 	case TW_START:
-		TWDR = xfer.sla_w;
+		TWDR = xfer.sla;
 		TWCR = TWCR_GO;
 		return 0;
 	case TW_MT_SLA_ACK:
@@ -276,7 +285,20 @@ uint8_t twi_interrupt(void)
 			TWCR = TWCR_GO;
 			return 0;
 		}
-		TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN);
+		TWCR = TWCR_STOP;
+		xfer.status = I2C_DONE;
+		break;
+	case TW_MR_SLA_ACK:
+		twi_receive_next();
+		return 0;
+	case TW_MR_DATA_ACK:
+		*xfer.buf++ = TWDR;
+		xfer.len--;
+		twi_receive_next();
+		return 0;
+	case TW_MR_DATA_NACK:
+		*xfer.buf = TWDR;
+		TWCR = TWCR_STOP;
 		xfer.status = I2C_DONE;
 		break;
 	case TW_MT_ARB_LOST:
@@ -285,8 +307,8 @@ uint8_t twi_interrupt(void)
 		xfer.status = I2C_FAILED;
 		break;
 	default:
-		/* NACK, or a bus error: release the bus. */
-		TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN);
+		/* NACK of the address or of a sent byte, or a bus error. */
+		TWCR = TWCR_STOP;
 		xfer.status = I2C_FAILED;
 		break;
 	}
@@ -294,20 +316,16 @@ uint8_t twi_interrupt(void)
 }
 
 /*
- * Send @len bytes to the 7-bit address @addr.  @len may be 0, which
- * only checks that a device answers at @addr.
- *
- * Returns 0, or -1 on NACK, lost arbitration or timeout.  After a
- * timeout the bus is reset; the interrupt may still fire once more, but
- * by then no task waits on xfer_wq and the wake is lost harmlessly.
+ * Run one transfer to @sla, which carries the R/W bit, and sleep until
+ * the interrupt finishes it.  Returns 0, or -1 on NACK, lost arbitration
+ * or timeout.  After a timeout the bus is reset; the interrupt may still
+ * fire once more, but by then no task waits on xfer_wq and the wake is
+ * lost harmlessly.
  */
-int i2c_write(uint8_t addr, const uint8_t *buf, uint8_t len)
+static int i2c_transfer(uint8_t sla, uint8_t *buf, uint8_t len)
 {
 	struct i2c_deadline stop;
-	int timed_out;
-
-	if (oops_in_progress)
-		return i2c_write_polled(addr, buf, len);
+	int timed_out, ret = 0;
 
 	mutex_lock(&bus_lock);
 
@@ -319,7 +337,7 @@ int i2c_write(uint8_t addr, const uint8_t *buf, uint8_t len)
 			break;
 		}
 
-	xfer.sla_w = (uint8_t)(addr << 1) | TW_WRITE;
+	xfer.sla = sla;
 	xfer.buf = buf;
 	xfer.len = len;
 	xfer.status = I2C_BUSY;
@@ -328,13 +346,41 @@ int i2c_write(uint8_t addr, const uint8_t *buf, uint8_t len)
 	/* Each byte takes 90 us at 100 kHz; allow a full millisecond each. */
 	timed_out = wait_event_timeout(&xfer_wq, xfer.status != I2C_BUSY,
 				       I2C_TIMEOUT_MS + len);
-	if (timed_out || xfer.status == I2C_FAILED) {
-		if (timed_out)
-			i2c_reset();
-		mutex_unlock(&bus_lock);
-		return -1;
+	if (timed_out) {
+		i2c_reset();
+		ret = -1;
+	} else if (xfer.status == I2C_FAILED) {
+		ret = -1;
 	}
 
 	mutex_unlock(&bus_lock);
-	return 0;
+	return ret;
+}
+
+/*
+ * Send @len bytes to the 7-bit address @addr.  @len may be 0, which
+ * only checks that a device answers at @addr.
+ *
+ * Returns 0, or -1 on NACK, lost arbitration or timeout.
+ */
+int i2c_write(uint8_t addr, const uint8_t *buf, uint8_t len)
+{
+	if (oops_in_progress)
+		return i2c_write_polled(addr, buf, len);
+	/* The interrupt only reads buf in this direction. */
+	return i2c_transfer((uint8_t)(addr << 1) | TW_WRITE,
+			    (uint8_t *)buf, len);
+}
+
+/*
+ * Receive @len bytes, at least one, from the 7-bit address @addr.
+ *
+ * Returns 0, or -1 on NACK, lost arbitration, timeout, a zero @len, or
+ * when called after panic(), which has no use for reads.
+ */
+int i2c_read(uint8_t addr, uint8_t *buf, uint8_t len)
+{
+	if (oops_in_progress || len == 0)
+		return -1;
+	return i2c_transfer((uint8_t)(addr << 1) | TW_READ, buf, len);
 }
