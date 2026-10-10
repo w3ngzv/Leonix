@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Context switch on the Timer1 compare match A interrupt, the TWI
- * interrupt and arch_yield().
+ * Context switch on the Timer1 compare match A interrupt, the TWI and
+ * USB interrupts and arch_yield().
  *
  * The interrupt has already pushed the PC.  The frame below it is r0,
  * SREG, r1, r2 ... r31, from high address to low, and task_create()
@@ -77,6 +77,31 @@ __vector_36:
 	save_context
 	store_sp
 	call	twi_interrupt
+	tst	r24
+	breq	1f
+	call	schedule
+1:	load_sp
+	restore_context
+	reti
+
+	/*
+	 * USB general and endpoint interrupts, the same way as TWI.  The
+	 * endpoint handler wakes usb_task(), see arch/avr/usb.c.
+	 */
+	.global	__vector_10
+__vector_10:
+	save_context
+	store_sp
+	call	usb_general_interrupt
+	load_sp
+	restore_context
+	reti
+
+	.global	__vector_11
+__vector_11:
+	save_context
+	store_sp
+	call	usb_endpoint_interrupt
 	tst	r24
 	breq	1f
 	call	schedule
