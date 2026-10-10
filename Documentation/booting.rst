@@ -53,8 +53,18 @@ Leonix 的映像因此不得超过 28672 字节. 每次复位都从 bootloader �
 
 栈指针的初值为 RAMEND, 即 0x0aff.
 
-以上熔丝位是 Arduino 烧录时使用的值, 尚未从这块板子上读回. Caterina 实现了
-AVR109 协议的熔丝读取命令, 可以经由 bootloader 用 avrdude 读出.
+以上熔丝位是 Arduino 烧录时使用的值. Caterina 实现了 AVR109 协议的熔丝
+读取命令, ``make fuses`` 经由 bootloader 用 avrdude 读出熔丝位与锁定位.
+2026-10-10 从这块板子上读回的低、高、扩展三个字节为 0xff、0xd8、0xcb, 与
+上表一致.
+
+锁定位读回为 0xff, 即没有任何位被编程. boards.txt 中 Arduino 烧录
+bootloader 之后写入的值是 ``leonardo.bootloader.lock_bits=0x2F``. 该值只
+编程 BLB11 (数据手册表 28-1), 对应表 27-3 的模式 2: 禁止以 SPM 改写引导区,
+LPM 读取不受限制. 两者不一致的原因尚未查明: 出厂时可能没有写入锁定位, 也
+可能是经由 Caterina 读出的值不可靠. 两种模式的差别只在于能否以 SPM 改写
+引导区, 以写入的方式检验会在锁定位确为 0xff 时破坏 bootloader, 因此没有
+检验. Leonix 不执行 SPM, 这一差别不影响运行.
 
 
 2. 中断向量
@@ -158,8 +168,11 @@ Caterina 还把 SRAM 地址 0x0800 处的一个字用作 boot key. 该处写入 
 
 Micro (PID 0x0037) 的 TX、RX 极性相反. 2026-10-08 在板子上用 init/main.c
 翻转 PC7, L LED 随之闪烁, L 一行由此确认. 同日翻转 PD5 时 TX LED 随之
-闪烁, TX 的引脚由此确认. 翻转无法区分点亮电平, TX 的极性与 RX 一行尚未
-实测.
+闪烁, TX 的引脚由此确认. 翻转无法区分点亮电平.
+
+2026-10-10 以一个诊断映像把 PD5 交替拉低 1.8 秒、拉高 0.2 秒, TX LED 长亮
+短灭, TX 低电平点亮由此确认. RX 一行的依据见 notes/lcd.rst 的"实测"一节:
+2026-10-09 液晶屏恢复之后, 代码把 PB0 置高, RX LED 随即熄灭.
 
 
 5. 重新烧录
@@ -179,7 +192,7 @@ TIMEOUT_PERIOD 一致. 该时长为目测, 未用仪器计时.
 6. 待办
 -------
 
-  - 从板子上读回熔丝位.
+  - 锁定位读回 0xff, 与 boards.txt 的 0x2F 不一致, 原因尚未查明, 见第 1 节.
   - 用外接电源检验 USB 关闭序列中的 VBUSTE 一项. 2026-10-08 插着 USB 线
     按下复位键, 超时之后 L LED 恢复 0.5 秒的翻转, 说明超时路径上打开中断
     之后没有 USB 中断进入 bad-interrupt 处理程序. 但测试期间 VBUS 一直
