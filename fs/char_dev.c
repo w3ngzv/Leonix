@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Character devices by name.  Linux keys them by major and minor number
- * and finds the name through a device node in /dev; with no filesystem
- * here, the name is the key.  Drivers register before sched_start(), so
- * the table needs no lock.
+ * Character devices, and /dev to reach them by name.  Linux keys them by
+ * major and minor number and finds the name through a device node; with
+ * no node to hold the number, the name is the key here.  Drivers register
+ * before sched_start(), so the table needs no lock.
  */
 #include <avr/pgmspace.h>
 #include <stddef.h>
 #include <string.h>
 
+#include <leonix/errno.h>
 #include <leonix/fs.h>
 
 struct chrdev {
@@ -19,30 +20,44 @@ struct chrdev {
 static struct chrdev chrdevs[MAX_CHRDEVS];
 static uint8_t nr_chrdevs;
 
-/* @name is a string in flash.  Returns 0, or -1 if the table is full. */
+/* @name is a string in flash.  Returns 0, or -ENOSPC if the table is full. */
 int register_chrdev(const char *name, const struct file_operations *fops)
 {
 	if (nr_chrdevs == MAX_CHRDEVS)
-		return -1;
+		return -ENOSPC;
 	chrdevs[nr_chrdevs].name = name;
 	chrdevs[nr_chrdevs].fops = fops;
 	nr_chrdevs++;
 	return 0;
 }
 
-/* @name is a string in SRAM.  Returns NULL if no device has that name. */
-const struct file_operations *chrdev_get(const char *name)
+static int devfs_readdir(struct file *f, char *name, uint8_t size)
+{
+	if (f->f_pos >= nr_chrdevs)
+		return 0;
+	strlcpy_P(name, chrdevs[f->f_pos++].name, size);
+	return 1;
+}
+
+static const struct file_operations devfs_dir_fops = {
+	.readdir = devfs_readdir,
+};
+
+/* Mounted at /dev by fs/vfs.c.  @rest is "" or "/", or "/name". */
+int devfs_open(struct file *f, const char *rest, uint16_t flags)
 {
 	uint8_t i;
 
-	for (i = 0; i < nr_chrdevs; i++)
-		if (!strcmp_P(name, chrdevs[i].name))
-			return chrdevs[i].fops;
-	return NULL;
-}
-
-/* The name of device @index, in flash, or NULL past the last one. */
-const char *chrdev_name(uint8_t index)
-{
-	return index < nr_chrdevs ? chrdevs[index].name : NULL;
+	(void)flags;
+	if (!rest[0] || !strcmp_P(rest, PSTR("/"))) {
+		f->f_op = &devfs_dir_fops;
+		return 0;
+	}
+	for (i = 0; i < nr_chrdevs; i++) {
+		if (strcmp_P(rest + 1, chrdevs[i].name))
+			continue;
+		f->f_op = chrdevs[i].fops;
+		return 0;
+	}
+	return -ENOENT;
 }

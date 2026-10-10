@@ -620,10 +620,11 @@ static void usb_kick(uint8_t events)
 	wake_up(&usb_wq);
 }
 
-static int acm_read(char *buf, uint8_t count)
+static int acm_read(struct file *f, char *buf, uint8_t count)
 {
 	uint8_t n = 0;
 
+	(void)f;
 	wait_event(&acm_rx_wq, acm_rx_head != acm_rx_tail);
 	while (n < count && acm_rx_head != acm_rx_tail) {
 		buf[n++] = acm_rx_buf[acm_rx_tail % ACM_RX_SIZE];
@@ -634,10 +635,11 @@ static int acm_read(char *buf, uint8_t count)
 	return n;
 }
 
-static int acm_write(const char *buf, uint8_t count)
+static int acm_write(struct file *f, const char *buf, uint8_t count)
 {
 	uint8_t n;
 
+	(void)f;
 	for (n = 0; n < count; n++) {
 		wait_event(&acm_tx_wq,
 			   (uint8_t)(acm_tx_head - acm_tx_tail) != ACM_TX_SIZE);

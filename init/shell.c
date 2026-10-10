@@ -5,26 +5,24 @@
  *
  * The shell is a kernel task: the board has no MMU and no privilege
  * levels, so there is no user space to run it in.  It still keeps to
- * the boundary a user program would have, reading and writing lines
- * through the device's file_operations and asking the kernel for
- * figures through the sched_ and log_ calls.  Echo and line editing are
+ * the boundary a user program would have, reading and writing through
+ * file descriptors and asking the kernel for figures through the sched_
+ * and log_ calls.  Echo and line editing are
  * the terminal's, in drivers/tty.c.
  */
 #include <avr/pgmspace.h>
 #include <string.h>
 
-#include <leonix/fs.h>
 #include <leonix/jiffies.h>
 #include <leonix/kernel.h>
 #include <leonix/printk.h>
 #include <leonix/sched.h>
 #include <leonix/shell.h>
 #include <leonix/tty.h>
+#include <leonix/unistd.h>
 
 #define SHELL_OUT	40	/* longest formatted output line */
 #define PERCENT		100
-
-static const struct file_operations *tty;
 
 /* Format into a line and write it out; the format string is in flash. */
 static void __attribute__((noinline)) sh_printf_P(const char *fmt, ...)
@@ -36,7 +34,7 @@ static void __attribute__((noinline)) sh_printf_P(const char *fmt, ...)
 	va_start(ap, fmt);
 	len = vsnprintk_P(out, sizeof(out), fmt, ap);
 	va_end(ap);
-	tty->write(out, len);
+	write(STDOUT_FILENO, out, len);
 }
 
 #define sh_printf(fmt, ...)	sh_printf_P(PSTR(fmt), ##__VA_ARGS__)
@@ -87,59 +85,72 @@ static void cmd_uptime(void)
 		  hundredth ? idle / hundredth : 0);
 }
 
-static void cmd_devices(void)
+/* The names in directory @path, one per line; "/" without an argument. */
+static void cmd_ls(const char *path)
 {
-	const char *name;
-	uint8_t i;
+	char name[NAME_MAX + 1];
+	int fd;
 
-	for (i = 0; (name = chrdev_name(i)); i++)
-		sh_printf("%S\n", name);
+	fd = open(path[0] ? path : "/", O_RDONLY | O_DIRECTORY);
+	if (fd < 0) {
+		sh_printf("ls: %s: error %d\n", path, -fd);
+		return;
+	}
+	while (readdir(fd, name, sizeof(name)) > 0)
+		sh_printf("%s\n", name);
+	close(fd);
 }
 
-static void run(const char *cmd)
+/* @cmd is the first word of the line, @arg the rest, possibly empty. */
+static void run(const char *cmd, const char *arg)
 {
 	if (!strcmp_P(cmd, PSTR("help")))
-		sh_printf("help ps dmesg uptime devices\n");
+		sh_printf("help ps dmesg uptime ls\n");
 	else if (!strcmp_P(cmd, PSTR("ps")))
 		cmd_ps();
 	else if (!strcmp_P(cmd, PSTR("dmesg")))
 		cmd_dmesg();
 	else if (!strcmp_P(cmd, PSTR("uptime")))
 		cmd_uptime();
-	else if (!strcmp_P(cmd, PSTR("devices")))
-		cmd_devices();
+	else if (!strcmp_P(cmd, PSTR("ls")))
+		cmd_ls(arg);
 	else
 		sh_printf("%s: not found\n", cmd);
 }
 
-/* tty_read() hands over a whole line, '\n' included, in one call. */
+/* The terminal hands over a whole line, '\n' included, in one read(). */
 static void shell_task(void)
 {
 	char line[TTY_LINE + 1];
+	char *arg;
 	int len;
 
 	for (;;) {
 		sh_printf("# ");
-		len = tty->read(line, TTY_LINE);
+		len = read(STDIN_FILENO, line, TTY_LINE);
 		if (len <= 1)
 			continue;
 		line[len - 1] = '\0';
-		run(line);
+		arg = strchr(line, ' ');
+		if (arg)
+			*arg++ = '\0';
+		run(line, arg ? arg : "");
 	}
 }
 
 /*
- * Start the shell on ttyACM0.  Called before sched_start(), after the
- * USB driver has registered the device.  Returns -1 if there is no such
- * device or no room for the task.
+ * Open the terminal as standard input and output, then start the shell.
+ * Called before sched_start(), after the USB driver has registered the
+ * device.  Returns -1 if there is no such device or no room for the
+ * task.
  */
 int shell_init(uint8_t *stack, uint16_t size)
 {
-	char name[sizeof("ttyACM0")];
+	char path[sizeof("/dev/ttyACM0")];
 
-	strcpy_P(name, PSTR("ttyACM0"));
-	tty = chrdev_get(name);
-	if (!tty)
+	strcpy_P(path, PSTR("/dev/ttyACM0"));
+	if (open(path, O_RDWR) != STDIN_FILENO ||
+	    dup2(STDIN_FILENO, STDOUT_FILENO) != STDOUT_FILENO)
 		return -1;
 	return task_create(shell_task, stack, size);
 }
