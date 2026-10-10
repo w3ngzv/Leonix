@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <avr/io.h>
+#include <util/atomic.h>
 
 #include <leonix/jiffies.h>
 #include <leonix/lcd.h>
@@ -154,7 +155,7 @@ static int lcd_show_status(uint32_t idle_ticks, uint32_t ticks, int relabel)
 static void lcd_task(void)
 {
 	uint32_t now, next_update, next_retry, next_blink;
-	uint32_t last_jiffies, last_idle;
+	uint32_t last_jiffies, last_idle, idle_now;
 	uint8_t page_age = 0;
 	int online, stack_page = 0, err;
 
@@ -168,7 +169,17 @@ static void lcd_task(void)
 	for (;;) {
 		if (online) {
 			sleep_until(next_update);
-			now = get_jiffies();
+			/*
+			 * Both counters are read at one instant, so the idle
+			 * ticks and the elapsed ticks cover the same window.
+			 * The refresh itself is part of the window: with the
+			 * I2C driver sleeping during transfers, most of its
+			 * time is idle.
+			 */
+			ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+				now = get_jiffies();
+				idle_now = sched_idle_ticks();
+			}
 			if (++page_age == LCD_PAGE_UPDATES) {
 				page_age = 0;
 				stack_page = !stack_page;
@@ -176,7 +187,7 @@ static void lcd_task(void)
 			if (stack_page)
 				err = lcd_show_stack();
 			else
-				err = lcd_show_status(sched_idle_ticks() - last_idle,
+				err = lcd_show_status(idle_now - last_idle,
 						      now - last_jiffies,
 						      page_age == 0);
 			if (err < 0) {
@@ -184,7 +195,7 @@ static void lcd_task(void)
 				next_retry = next_blink = get_jiffies();
 				continue;
 			}
-			last_idle = sched_idle_ticks();
+			last_idle = idle_now;
 			last_jiffies = now;
 			next_update += HZ;
 			continue;
