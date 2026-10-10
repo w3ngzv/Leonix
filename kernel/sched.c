@@ -14,6 +14,7 @@
 #include <leonix/jiffies.h>
 #include <leonix/panic.h>
 #include <leonix/sched.h>
+#include <leonix/wait.h>
 
 /* Number of registers r1..r31 in the frame below r0 and SREG. */
 #define NR_SAVED_GPRS	31
@@ -230,6 +231,55 @@ void sleep_until(uint32_t deadline)
 	current->wake_at = deadline;
 	current->state = TASK_SLEEPING;
 	arch_yield();
+}
+
+/*
+ * Put the current task on @wq and give up the CPU; the caller has
+ * disabled interrupts and found its condition false.  With @timed the
+ * task also wakes once jiffies reaches @deadline.  Returns with
+ * interrupts enabled and the task off @wq, since a later wake_up() on
+ * @wq must not end some other sleep of this task.
+ */
+_Static_assert(MAX_TASKS <= 8, "struct wait_queue holds one bit per task in a byte");
+
+void __wait(struct wait_queue *wq, uint32_t deadline, uint8_t timed)
+{
+	uint8_t bit = 1 << current_index;
+
+	wq->waiters |= bit;
+	current->wake_at = deadline;
+	current->state = timed ? TASK_SLEEPING : TASK_BLOCKED;
+	arch_yield();
+
+	cli();
+	wq->waiters &= ~bit;
+	sei();
+}
+
+/*
+ * Make every task waiting on @wq runnable.  Callable from a task or an
+ * interrupt handler.  A task already woken by its deadline has left
+ * TASK_SLEEPING and is not touched.  Returns the number of tasks woken,
+ * so an interrupt handler can tell whether a switch is worth making.
+ */
+uint8_t wake_up(struct wait_queue *wq)
+{
+	uint8_t woken = 0;
+	uint8_t i;
+
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+		for (i = 0; i < nr_tasks; i++) {
+			if (!(wq->waiters & (1 << i)))
+				continue;
+			if (tasks[i].state == TASK_SLEEPING ||
+			    tasks[i].state == TASK_BLOCKED) {
+				tasks[i].state = TASK_RUNNABLE;
+				woken++;
+			}
+		}
+		wq->waiters = 0;
+	}
+	return woken;
 }
 
 /*
