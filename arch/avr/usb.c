@@ -13,6 +13,11 @@
  * one line.  Opening the port first replays whatever records the log
  * still holds.
  *
+ * Closing the port after setting it to 1200 baud restarts the board into
+ * Caterina, which then stays for the programmer: the Arduino core's
+ * convention, so that flashing needs no press of the reset button.  See
+ * Documentation/booting.rst, section 3.
+ *
  * The endpoint interrupt only masks itself and wakes usb_task(), which
  * serves the request, the way the TWI interrupt hands an I2C transfer
  * back to its caller.  A control transfer polls the endpoint between
@@ -30,6 +35,7 @@
  */
 #include <avr/io.h>
 #include <avr/pgmspace.h>
+#include <avr/wdt.h>
 #include <util/delay.h>
 
 #include <leonix/printk.h>
@@ -101,6 +107,15 @@
 
 /* CDC PSTN 1.2 table 18: DTR, set while the host has the port open. */
 #define CDC_LINE_DTR		(1 << 0)
+
+/*
+ * Caterina stays in the bootloader after a watchdog reset if this word
+ * holds the key.  The address is in the boot stack, which nothing uses
+ * after sched_start(); the Makefile checks that .bss ends below it.
+ */
+#define BOOT_KEY_ADDR		0x0800
+#define BOOT_KEY		0x7777
+#define BOOTLOADER_BAUD		1200
 
 /* "[secs] text\r\n", one console line. */
 #define CONSOLE_LINE		(LOG_TEXT + 12)
@@ -352,6 +367,16 @@ static void standard_request(const struct setup_packet *setup)
 	}
 }
 
+/*
+ * The watchdog fires after the status stage has gone out, and the host
+ * sees the device leave the bus.  Tasks keep running until then.
+ */
+static void enter_bootloader(void)
+{
+	*(volatile uint16_t *)BOOT_KEY_ADDR = BOOT_KEY;
+	wdt_enable(WDTO_120MS);
+}
+
 static void class_request(const struct setup_packet *setup)
 {
 	uint8_t *p = (uint8_t *)&line;
@@ -374,6 +399,8 @@ static void class_request(const struct setup_packet *setup)
 			console_replay = 1;
 		line_state = setup->value;
 		ep0_ack();
+		if (line.baud == BOOTLOADER_BAUD && !(line_state & CDC_LINE_DTR))
+			enter_bootloader();
 		break;
 	default:
 		ep0_stall();
