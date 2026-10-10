@@ -138,8 +138,9 @@ Leonix 改用 arch/avr/start.S, 是为了让复位向量到 main() 之间的每�
 
 Caterina 还把 SRAM 地址 0x0800 处的一个字用作 boot key. 该处写入 0x7777
 之后再发生看门狗复位, bootloader 会保持运行. Arduino core 在主机以 1200
-波特率打开 CDC 端口时写入该值. Leonix 没有 CDC 端口, 不会写入 boot key,
-.data 与 .bss 可以覆盖这个地址.
+波特率打开 CDC 端口再关闭时写入该值. 提交 7eed809 之后 Leonix 也有 CDC
+端口, 并沿用同一约定, 见 notes/usb.rst. .data 与 .bss 因此不得覆盖这个
+地址, Makefile 在链接之后检查 ``__bss_end``.
 
 
 4. LED
@@ -164,8 +165,10 @@ Micro (PID 0x0037) 的 TX、RX 极性相反. 2026-10-08 在板子上用 init/mai
 5. 重新烧录
 -----------
 
-应用中没有 CDC 端口, 1200 波特率复位的办法因此失效. 烧录时需要手动按下
-复位键, 并在 bootloader 的等待窗口内启动 avrdude::
+Leonix 运行时, ``make flash`` 先以 1200 波特率打开并关闭 Leonix 的 CDC
+端口, 板子随即复位进入 bootloader, 不必按复位键. 板上的固件早于提交
+7eed809, 或者 Leonix 没有运行时, 仍需手动按下复位键, 并在 bootloader 的
+等待窗口内启动 avrdude::
 
   avrdude -p m32u4 -c avr109 -P <port> -U flash:w:leonix.hex:i
 

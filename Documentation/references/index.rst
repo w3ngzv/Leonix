@@ -69,6 +69,34 @@ UM10204-I2C-NXP.pdf
 
   https://www.nxp.com/docs/en/user-guide/UM10204.pdf
 
+USB
+---
+
+USB-2.0-spec-20240604.pdf
+  USB-IF, Universal Serial Bus Specification, Revision 2.0, 2000 年 4 月 27
+  日. 第 9 章的标准请求码 (表 9-4)、描述符类型 (表 9-5) 与请求错误
+  (9.2.7 节), 以及控制传输的包长规定 (5.5.3 节) 的依据. 版权页署名为
+  Compaq、Hewlett-Packard、Intel 等七家公司, 声明 All rights reserved. 该文件取自 USB-IF 打包的
+  usb_20_20240604.zip, 本目录的副本于 2026-10-10 下载, SHA-256 为
+  d39698a33486c399124af92bd02e4f978fd9a836b5cf4e52e6e4633eb1d89f61.
+
+  https://www.usb.org/sites/default/files/usb_20_20240604.zip
+
+USB-CDC-1.2.pdf, USB-CDC-PSTN-1.2.pdf
+  USB-IF, Universal Serial Bus Class Definitions for Communications Devices,
+  Revision 1.2 (Errata 1), 2010 年 11 月, 以及 Universal Serial Bus
+  Communications Class Subclass Specification for PSTN Devices, Revision
+  1.2, 2007 年 2 月. 前者给出类代码与功能描述符的通用格式, 后者给出抽象
+  控制模型 (ACM) 的请求码 (表 13)、line coding 结构 (表 17) 与 DTR 位
+  (表 18). 两份文件的版权页都声明 All rights reserved. 两者取自
+  CDC1.2_WMC1.1_012011.zip, 前者在压缩包中名为
+  CDC120-20101103-track.pdf, 后者名为 PSTN120.pdf. 本目录的副本于
+  2026-10-10 下载, SHA-256 分别为
+  38b18b25509dcc906b8dda2b1ac50e1997836f02ed629ad45205d21fe8342f8a 与
+  61dff30af2c90d53e53b7de0fc8dc8b6e22f4128442f35abc341a434d49dae19.
+
+  https://www.usb.org/sites/default/files/CDC1.2_WMC1.1_012011.zip
+
 架构的历史资料
 --------------
 

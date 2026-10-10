@@ -179,21 +179,31 @@ Python 包与版本列在 Documentation/sphinx/requirements.txt. 其中 jieba �
 烧录
 ====
 
-Leonix 没有 USB 串口. 板子只在 Caterina bootloader 等待期间以串口出现在
-主机上, 等待时长约 8 秒. 烧录时需要先按复位键, 再在这段时间内启动 avrdude.
+Leonix 运行时, 板子在主机上是一个 USB 串口. ``make flash`` 先以 1200
+波特率打开并关闭该串口, 板子随即复位进入 Caterina bootloader, 端口消失后
+以 bootloader 的身份重新出现, 之后才启动 avrdude. 原理见 notes/usb.rst.
 
 1. 用 USB 线连接板子与主机.
-2. 按一下复位键. 板上 LED 开始呈呼吸状亮灭, 表示 bootloader 正在等待.
-3. 在 8 秒内运行下列命令之一, 视操作系统而定::
+2. 运行下列命令之一, 视操作系统而定::
 
      make flash PORT=$(ls /dev/cu.usbmodem* | head -n 1)     macOS
      make flash PORT=$(ls /dev/ttyACM* | head -n 1)          Linux
-     make flash PORT=COM5                                    Windows
 
    avrdude 报告写入与校验的进度. 写入完成之后应用开始运行.
 
-端口名在同一台主机上通常保持不变. 第一次烧录时, 先按复位键, 再查看端口名,
-之后可以直接写入 ``PORT=``:
+板上的映像早于提交 7eed809, 或者 Leonix 没有运行时, 板子不响应 1200 波特率
+的信号. 这时先按一下复位键, 板上 LED 开始呈呼吸状亮灭, 表示 bootloader 正在
+等待, 再在约 8 秒内运行上面的命令. ``make flash`` 发现端口在 1 秒内没有消失,
+即认为板子已在 bootloader 中, 直接启动 avrdude.
+
+``make flash`` 用 ``stty`` 发送 1200 波特率的信号, 并检查 ``/dev`` 下的
+端口文件是否存在, 这一做法在 Windows 的 MSYS2 中未经测试. 按复位键之后直接
+运行 avrdude 的做法不依赖这两者::
+
+  avrdude -p m32u4 -c avr109 -P COM5 -b 57600 -U flash:w:leonix.hex:i
+
+端口名在同一台主机上通常保持不变, 第一次烧录之前先查看端口名, 之后可以
+直接写入 ``PORT=``:
 
 macOS
   ``ls /dev/cu.usbmodem*``.
@@ -213,12 +223,20 @@ Windows
 ========
 
 ``usage: make flash PORT=/dev/cu.usbmodemXXXX``
-  没有提供 PORT. 第 3 步中的 ``ls`` 没有找到端口时同样出现这条信息, macOS
-  默认的 zsh 在这条信息之前还会输出 ``no matches found``. 原因是复位键没有按下, 或 8 秒的
-  等待已经结束. 重新按复位键, 再运行一次.
+  没有提供 PORT. 第 2 步中的 ``ls`` 没有找到端口时同样出现这条信息, macOS
+  默认的 zsh 在这条信息之前还会输出 ``no matches found``. 原因是板子上的
+  映像没有 USB 串口, 而复位键没有按下, 或 8 秒的等待已经结束. 按复位键,
+  再运行一次.
+
+``/dev/... did not come back``
+  板子复位之后, bootloader 的端口在 8 秒内没有出现. 按复位键, 再运行一次.
+
+avrdude 报告 ``butterfly_recv(pgm, &c, 1) failed``
+  avrdude 连接到了 Leonix 自己的串口, 该串口不回应 bootloader 的协议. 板上的映像早于
+  提交 7eed809 时会出现这一情形. 按复位键, 再运行一次.
 
 avrdude 报告无法打开端口
-  等待已经结束, 串口随之消失. 重新按复位键, 再运行一次.
+  bootloader 的等待已经结束, 串口随之消失. 按复位键, 再运行一次.
 
 Linux 上 avrdude 报告 Permission denied
   当前用户不在串口设备所属的组中, 见上文 Linux 一节.
