@@ -6,8 +6,8 @@
  *
  * printk() formats on the caller's stack and copies the record in with
  * interrupts disabled, so it may be called from a task, from an
- * interrupt handler, and before sched_start().  Each call costs about
- * 60 bytes of stack below the caller: keep it out of deep call chains
+ * interrupt handler, and before sched_start().  Each call costs up to
+ * 82 bytes of stack below the caller: keep it out of deep call chains
  * such as the I2C transfer path.
  */
 #include <stdarg.h>
