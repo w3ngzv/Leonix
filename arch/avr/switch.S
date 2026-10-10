@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Context switch on the Timer1 compare match A interrupt.
+ * Context switch on the Timer1 compare match A interrupt, the TWI
+ * interrupt and arch_yield().
  *
  * The interrupt has already pushed the PC.  The frame below it is r0,
  * SREG, r1, r2 ... r31, from high address to low, and task_create()
@@ -62,6 +63,24 @@ __vector_17:
 	store_sp
 	call	timer_interrupt
 	load_sp
+	restore_context
+	reti
+
+	/*
+	 * TWI interrupt.  twi_interrupt() returns non-zero when it has woken
+	 * a task; switching right away lets the I2C caller run on before
+	 * the next tick instead of up to 1 ms later.  The frame is the
+	 * tick's, so either path can resume a task the other saved.
+	 */
+	.global	__vector_36
+__vector_36:
+	save_context
+	store_sp
+	call	twi_interrupt
+	tst	r24
+	breq	1f
+	call	schedule
+1:	load_sp
 	restore_context
 	reti
 
