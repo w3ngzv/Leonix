@@ -48,6 +48,9 @@ _Static_assert(I2C_TWBR <= 255, "TWBR is 8 bits, needs a TWI prescaler");
 
 static void i2c_reset(void);
 
+/* Held for a whole transfer, and while i2c_init() resets the bus. */
+static struct mutex bus_lock = MUTEX_INIT;
+
 /*
  * The internal pull-ups (20 to 50 kOhm, datasheet table 29-1) are weak
  * next to the backpack's own, but they keep both lines high while the
@@ -58,14 +61,22 @@ static void i2c_reset(void);
  * avr-gcc emits as one sbi or cbi.  blink_tx writes PIND on the same
  * port from another task, and an in/ori/out sequence here could be
  * switched out halfway and write back a stale PORTD5.
+ *
+ * The reset would cut off a transfer another task has in flight, so it
+ * runs under bus_lock.  panic() calls this too, possibly while the lock
+ * is held, and skips it: nothing else runs after panic().
  */
 void i2c_init(void)
 {
+	if (!oops_in_progress)
+		mutex_lock(&bus_lock);
 	PORTD |= 1 << PORTD0;
 	PORTD |= 1 << PORTD1;
 	TWSR = 0;			/* prescaler 1 */
 	TWBR = I2C_TWBR;
 	i2c_reset();
+	if (!oops_in_progress)
+		mutex_unlock(&bus_lock);
 }
 
 /*
@@ -253,7 +264,6 @@ static struct {
 } xfer;
 
 static struct wait_queue xfer_wq = WAIT_QUEUE_INIT;
-static struct mutex bus_lock = MUTEX_INIT;
 
 #define TWCR_GO		((1 << TWINT) | (1 << TWEN) | (1 << TWIE))
 #define TWCR_STOP	((1 << TWINT) | (1 << TWSTO) | (1 << TWEN))
