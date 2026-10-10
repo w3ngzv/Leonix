@@ -20,6 +20,7 @@
 #include <leonix/sched.h>
 
 #define PCF_RS		(1 << 0)
+#define PCF_RW		(1 << 1)
 #define PCF_E		(1 << 2)
 #define PCF_BACKLIGHT	(1 << 3)
 
@@ -160,4 +161,31 @@ int lcd_puts(const char *s)
 		if (lcd_write_byte((uint8_t)*s++, PCF_RS) < 0)
 			return -1;
 	return 0;
+}
+
+/*
+ * Check that the display has kept the state lcd_init() gave it.
+ *
+ * A backpack unplugged and plugged back between two transfers never
+ * misses an ACK, yet its HD44780 has reset to 8-bit mode and reads every
+ * later nibble wrongly.  The PCF8574 has reset too, and its outputs read
+ * back high (TI SCPS068K, power-on reset), while every byte the driver
+ * writes last leaves E and RW low.
+ *
+ * Only E and RW are compared.  Both drive HD44780 inputs, so they read
+ * back what was written.  The backlight pin does not: on the board this
+ * was tested with, it reads low while written high, as a transistor base
+ * would hold it, and comparing the whole byte reported a replug on every
+ * refresh.
+ *
+ * Returns 1 if the display is as left, 0 if it must be initialised
+ * again, or -1 if the expander does not answer.
+ */
+int lcd_check(void)
+{
+	uint8_t port;
+
+	if (i2c_read(pcf_addr, &port, 1) < 0)
+		return -1;
+	return !(port & (PCF_E | PCF_RW));
 }
