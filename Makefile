@@ -107,14 +107,19 @@ clean:
 
 # Host tests of the code in lib/, which has no AVR dependency.
 HOSTCC ?= cc
-TEST_BIN := tests/test_vsprintf
+TEST_BIN := tests/test_vsprintf tests/test_lxfs
 
 check: $(TEST_BIN)
-	./$(TEST_BIN)
+	./tests/test_vsprintf
+	./tests/test_lxfs
 
-$(TEST_BIN): tests/test_vsprintf.c lib/vsprintf.c include/leonix/kernel.h
+tests/test_vsprintf: tests/test_vsprintf.c lib/vsprintf.c include/leonix/kernel.h
 	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $@ \
 		tests/test_vsprintf.c lib/vsprintf.c
+
+tests/test_lxfs: tests/test_lxfs.c fs/lxfs.c include/leonix/lxfs.h include/leonix/fs.h
+	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $@ \
+		tests/test_lxfs.c fs/lxfs.c
 
 # HTML documentation in Documentation/output, as "make htmldocs" in Linux.
 # Missing Sphinx only skips the docs; the firmware build does not need it.
