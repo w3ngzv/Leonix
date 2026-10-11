@@ -258,6 +258,16 @@ uint8_t vm_run(struct vm *vm)
 			}
 			vm_push(vm, a);
 			break;
+		case OP_MULDIV:			/* Forth's star-slash */
+			target = vm_pop(vm);
+			b = vm_pop(vm);
+			a = vm_pop(vm);
+			if (!target)
+				vm->fault = VM_DIVIDE;
+			else
+				vm_push(vm, (uint32_t)(uint16_t)a * (uint16_t)b /
+					    target);
+			break;
 		case OP_NOT:
 			vm_push(vm, ~vm_pop(vm));
 			break;

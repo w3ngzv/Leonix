@@ -32,6 +32,7 @@ enum {
 	OP_ROT, OP_PICK,
 	OP_ADD = 0x10, OP_SUB, OP_MUL, OP_DIVU, OP_MODU, OP_AND, OP_OR,
 	OP_XOR, OP_SHL, OP_SHR, OP_NOT, OP_NEG,
+	OP_MULDIV,		/* a b c -- a * b / c, unsigned, 32-bit product */
 	OP_EQ = 0x20, OP_LT, OP_ULT, OP_EQZ,
 	OP_LDB = 0x30, OP_STB, OP_LDW, OP_STW,
 	OP_JMP = 0x40, OP_JZ, OP_JNZ, OP_CALL, OP_RET, OP_TOR, OP_FROMR,
