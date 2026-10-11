@@ -51,7 +51,8 @@ Leonix 的映像因此不得超过 28672 字节. 每次复位都从 bootloader �
   0x0060 - 0x00ff   扩展 I/O 寄存器
   0x0100 - 0x0aff   片内 SRAM, 2560 字节
 
-栈指针的初值为 RAMEND, 即 0x0aff.
+硬件复位时栈指针的初值为 RAMEND, 即 0x0aff. Leonix 的启动代码把它改为
+0x07ff, 0x0802 至 0x0aff 用于任务栈, 见 notes/vfs.rst.
 
 以上熔丝位是 Arduino 烧录时使用的值. Caterina 实现了 AVR109 协议的熔丝
 读取命令, ``make fuses`` 经由 bootloader 用 avrdude 读出熔丝位与锁定位.

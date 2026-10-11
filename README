@@ -23,7 +23,8 @@ blink the L and TX LEDs, the third drives an HD44780 LCD through a
 PCF8574 I2C backpack, showing the uptime and how idle the CPU is, and
 reinitialises it after the backpack is unplugged and plugged back.
 A fourth task runs the USB device, and a fifth a small shell on the
-USB serial port, with ps, dmesg, uptime and devices.
+USB serial port.  Its commands are programs in /bin, and files written
+with echo > file live in a small filesystem on the EEPROM.
 
 printk() keeps the last 16 messages.  Opening the serial port replays
 them, then follows new ones and gives the shell prompt:
@@ -82,7 +83,7 @@ Documentation/booting.rst
 Documentation/notes/index.rst
 	Design notes on the AVR architecture itself, the start code, the
 	I/O pins, the system tick, the scheduler, the I2C LCD, the kernel
-	log, the USB serial port and the shell, written
+	log, the USB serial port, the shell and the filesystem, written
 	for readers new to kernel work.  Read them in
 	the order listed there.
 
