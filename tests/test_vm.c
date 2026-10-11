@@ -83,9 +83,9 @@ int main(void)
 
 	r = run("tests/vm/arith.lx", 1, argv, &vm);
 	CHECK(r == VM_OK);
-	CHECK(vm.status == 7);
+	CHECK(vm.status == 8);
 	CHECK(out_len == 3 && !memcmp(out, "ok\n", 3));
-	if (vm.status != 7)
+	if (vm.status != 8)
 		printf("arith failed check %d\n", vm.status);
 
 	/* fault.s takes the fault number as argc - 1 */

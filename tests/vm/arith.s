@@ -1,5 +1,5 @@
 ; Arithmetic, stack words, a loop, a call, memory, and a system call.
-; Writes "ok\n" through write(1, ...) and exits with 7 if every check
+; Writes "ok\n" through write(1, ...) and exits with 8 if every check
 ; held; a failed check exits with its own number.
 	.equ STDOUT 1
 	.data counter 2
@@ -30,6 +30,13 @@
 	lit 1
 	call check		; 4: lt is signed
 
+	lit 60000
+	lit 99
+	lit 60000
+	muldiv
+	lit 99
+	call check		; 5: muldiv keeps the 32-bit product
+
 	lit 0
 	lit counter
 	stw
@@ -46,7 +53,7 @@ loop:	lit counter
 	lit counter
 	ldw
 	lit 10
-	call check		; 5: loop ran ten times
+	call check		; 6: loop ran ten times
 
 	lit 'o'
 	lit buf
@@ -62,9 +69,9 @@ loop:	lit counter
 	lit 3
 	sys write
 	lit 3
-	call check		; 6: write returned 3
+	call check		; 7: write returned 3
 
-	lit 7
+	lit 8
 	sys exit
 
 ; ( got want -- ) counts the checks, exits with the number of a failed one
