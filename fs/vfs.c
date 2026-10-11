@@ -37,15 +37,43 @@ static const struct mount mounts[] = {
 
 static struct file files[MAX_FDS];
 
-/* A relative path with the root put in front.  One task uses the VFS. */
+/* The path being resolved.  One task uses the VFS. */
 static char abs_path[TTY_LINE + 2];
 
+/*
+ * @path as an absolute path with no "." or ".." and no repeated '/', in
+ * abs_path, or NULL if it does not fit.  A relative path starts at the
+ * root, the only working directory there is, and ".." at the root stays
+ * there, as in Linux.
+ */
 static const char *absolute(const char *path)
 {
-	if (path[0] == '/')
-		return path;
-	abs_path[0] = '/';
-	strlcpy(abs_path + 1, path, sizeof(abs_path) - 1);
+	const char *seg;
+	uint8_t len = 0, n;
+
+	while (*path) {
+		while (*path == '/')
+			path++;
+		seg = path;
+		while (*path && *path != '/')
+			path++;
+		n = path - seg;
+		if (!n || (n == 1 && seg[0] == '.'))
+			continue;
+		if (n == 2 && seg[0] == '.' && seg[1] == '.') {
+			while (len && abs_path[--len] != '/')
+				;
+			continue;
+		}
+		if ((size_t)len + 1 + n >= sizeof(abs_path))
+			return NULL;
+		abs_path[len++] = '/';
+		memcpy(abs_path + len, seg, n);
+		len += n;
+	}
+	if (!len)
+		abs_path[len++] = '/';
+	abs_path[len] = '\0';
 	return abs_path;
 }
 
@@ -105,6 +133,8 @@ int vfs_open(struct file *f, const char *path, uint16_t flags)
 	int err;
 
 	path = absolute(path);
+	if (!path)
+		return -ENAMETOOLONG;
 	f->f_pos = 0;
 	f->f_flags = flags;
 	f->f_size = 0;
@@ -192,6 +222,8 @@ int unlink(const char *path)
 	const char *rest;
 
 	path = absolute(path);
+	if (!path)
+		return -ENAMETOOLONG;
 	mnt = lookup_mount(path, &rest);
 	if (!rest[0] || !strcmp_P(rest, PSTR("/")))
 		return -EISDIR;
