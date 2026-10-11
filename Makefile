@@ -13,7 +13,7 @@ OBJS := arch/avr/start.o arch/avr/switch.o arch/avr/time.o arch/avr/i2c.o \
 	arch/avr/usb.o arch/avr/panic.o kernel/sched.o kernel/printk.o \
 	fs/char_dev.o fs/vfs.o fs/lxfs.o fs/romfs.o fs/romfs_image.o \
 	fs/procfs.o kernel/vm.o kernel/exec.o drivers/tty.o \
-	drivers/eeprom.o drivers/lcd.o lib/vsprintf.o lib/dprintf.o init/shell.o \
+	drivers/eeprom.o drivers/lcd.o lib/vsprintf.o lib/dprintf.o init/init.o \
 	init/main.o
 
 
