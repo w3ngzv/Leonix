@@ -42,7 +42,7 @@ int16_t vm_load_byte(struct vm *vm, uint16_t addr)
 }
 
 /* Returns 0, or -1 for an address outside the data memory. */
-int vm_store_byte(struct vm *vm, uint16_t addr, uint8_t value)
+static int vm_store_byte(struct vm *vm, uint16_t addr, uint8_t value)
 {
 	if (addr < VM_DATA_BASE || addr - VM_DATA_BASE >= vm->data_len)
 		return -1;
