@@ -90,26 +90,26 @@ static struct file *get_file(int fd)
 	return &files[fd];
 }
 
-int open(const char *path, uint16_t flags)
+/*
+ * Open @path into @f, which need not be in the descriptor table: the
+ * kernel opens the code of a program this way.  Returns 0 or a negative
+ * errno, with f->f_op NULL on failure.
+ */
+int vfs_open(struct file *f, const char *path, uint16_t flags)
 {
 	const struct mount *mnt;
 	const char *rest;
-	struct file *f;
-	int fd, err;
+	int err;
 
 	path = absolute(path);
-	for (fd = 0; fd < MAX_FDS && files[fd].f_op; fd++)
-		;
-	if (fd == MAX_FDS)
-		return -EMFILE;
-	f = &files[fd];
 	f->f_pos = 0;
 	f->f_flags = flags;
+	f->f_size = 0;
 	f->private_data = 0;
 
 	if (!strcmp_P(path, PSTR("/"))) {
 		f->f_op = &root_fops;
-		return fd;
+		return 0;
 	}
 	mnt = lookup_mount(path, &rest);
 	err = mnt->open(f, rest, flags);
@@ -118,10 +118,24 @@ int open(const char *path, uint16_t flags)
 		return err;
 	}
 	if ((flags & O_DIRECTORY) && !f->f_op->readdir) {
-		close(fd);
+		if (f->f_op->release)
+			f->f_op->release(f);
+		f->f_op = NULL;
 		return -ENOTDIR;
 	}
-	return fd;
+	return 0;
+}
+
+int open(const char *path, uint16_t flags)
+{
+	int fd, err;
+
+	for (fd = 0; fd < MAX_FDS && files[fd].f_op; fd++)
+		;
+	if (fd == MAX_FDS)
+		return -EMFILE;
+	err = vfs_open(&files[fd], path, flags);
+	return err < 0 ? err : fd;
 }
 
 int close(int fd)
