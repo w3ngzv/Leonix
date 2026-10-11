@@ -142,8 +142,8 @@ leonix.map
 
 - 占用的 Flash 为 text 加 data, 即 1070 字节. ``.data`` 的初值同样存放在
   Flash 中, 由启动代码复制到 SRAM.
-- 静态占用的 SRAM 为 data 加 bss, 即 274 字节. SRAM 共 2560 字节, 其余部分
-  留给 main() 使用的启动栈.
+- 静态占用的 SRAM 为 data 加 bss, 即 274 字节. SRAM 共 2560 字节. 0x0802
+  以上的任务栈位于 .noinit 段, 不计入 data 与 bss, 布局见 notes/vfs.rst.
 - Flash 的上限是 28672 字节. 超出时链接失败, 报错信息含
   ``region `text' overflowed``.
 

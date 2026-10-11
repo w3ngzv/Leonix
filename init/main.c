@@ -2,6 +2,7 @@
 #include <avr/io.h>
 #include <util/atomic.h>
 
+#include <leonix/eeprom.h>
 #include <leonix/jiffies.h>
 #include <leonix/kernel.h>
 #include <leonix/lcd.h>
@@ -17,7 +18,7 @@
  */
 #define TASK_STACK_SIZE		96
 #define LCD_TASK_STACK_SIZE	224
-#define SHELL_STACK_SIZE	256
+#define SHELL_STACK_SIZE	288
 #define TX_BLINK_HALF_PERIOD	(HZ / 8)
 #define RX_ERROR_HALF_PERIOD	(HZ / 20)
 #define LCD_RETRY_INTERVAL	(HZ / 2)
@@ -32,8 +33,8 @@ uint16_t blink_half_period = HZ / 2;
 
 static uint8_t blink_l_stack[TASK_STACK_SIZE];
 static uint8_t blink_tx_stack[TASK_STACK_SIZE];
-static uint8_t lcd_stack[LCD_TASK_STACK_SIZE];
-static uint8_t shell_stack[SHELL_STACK_SIZE];
+static uint8_t lcd_stack[LCD_TASK_STACK_SIZE] __task_stack;
+static uint8_t shell_stack[SHELL_STACK_SIZE] __task_stack;
 
 /*
  * Each LED task sleeps until its next toggle.  The deadline advances by
@@ -225,6 +226,8 @@ int main(void)
 {
 	time_init();
 	printk("Leonix booted");
+	if (eeprom_fs_init())
+		printk("mkfs lxfs");
 	task_create(blink_l, blink_l_stack, sizeof(blink_l_stack));
 	task_create(blink_tx, blink_tx_stack, sizeof(blink_tx_stack));
 	task_create(lcd_task, lcd_stack, sizeof(lcd_stack));

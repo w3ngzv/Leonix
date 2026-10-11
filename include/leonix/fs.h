@@ -7,21 +7,58 @@
 #define MAX_CHRDEVS	4
 
 /*
- * A character device, after Linux's struct file_operations but with
- * neither files nor offsets: a device has one stream each way.
- *
- * read() sleeps until at least one byte is there and returns how many it
- * stored, at most @count.  write() sleeps until every byte has been taken
- * and returns @count.  Either returns -1 on a device that cannot do it.
+ * open() flags, with the values of Linux's asm-generic/fcntl.h, except
+ * O_DIRECTORY: Linux's 0x10000 does not fit the 16-bit flags kept here,
+ * and 0x8000 is a bit Leonix has no other use for.
+ */
+#define O_RDONLY	0x0000
+#define O_WRONLY	0x0001
+#define O_RDWR		0x0002
+#define O_ACCMODE	0x0003
+#define O_CREAT		0x0040
+#define O_TRUNC		0x0200
+#define O_APPEND	0x0400
+#define O_DIRECTORY	0x8000
+
+/* Longest name in a directory, the terminator excluded. */
+#define NAME_MAX	12
+
+struct file;
+
+/*
+ * After Linux's struct file_operations.  read() and write() return the
+ * bytes moved or a negative errno; read() on a device sleeps until at
+ * least one byte is there, and returns 0 at the end of a file.
+ * readdir() stores the next name in a directory and returns 1, or 0
+ * after the last.  A NULL member is an operation the file cannot do.
  * Only a task may call them.
  */
 struct file_operations {
-	int (*read)(char *buf, uint8_t count);
-	int (*write)(const char *buf, uint8_t count);
+	int (*read)(struct file *f, char *buf, uint8_t count);
+	int (*write)(struct file *f, const char *buf, uint8_t count);
+	int (*readdir)(struct file *f, char *name, uint8_t size);
+	void (*release)(struct file *f);
+};
+
+struct file {
+	const struct file_operations *f_op;	/* NULL while the slot is free */
+	uint16_t f_pos;
+	uint16_t f_flags;
+	uint8_t private_data;			/* the filesystem's own use */
+};
+
+/*
+ * A filesystem mounted at a fixed path.  open() gets the rest of the path
+ * after the mount point, starting with '/' or empty for the mount point
+ * itself, fills in @f and returns 0 or a negative errno.
+ */
+struct mount {
+	const char *path;			/* in flash */
+	int (*open)(struct file *f, const char *rest, uint16_t flags);
+	int (*unlink)(const char *rest);
 };
 
 int register_chrdev(const char *name, const struct file_operations *fops);
-const struct file_operations *chrdev_get(const char *name);
-const char *chrdev_name(uint8_t index);
+int devfs_open(struct file *f, const char *rest, uint16_t flags);
 
 #endif /* _LEONIX_FS_H */

@@ -12,3 +12,4 @@ __pycache__/
 node_modules/
 Documentation/output/
 tests/test_vsprintf
+tests/test_lxfs
