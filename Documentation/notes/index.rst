@@ -25,3 +25,4 @@
    usb
    shell
    vfs
+   vm
