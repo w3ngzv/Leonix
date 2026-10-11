@@ -2,9 +2,9 @@ Everything outside the kernel lives in its own repository and is checked
 out here, the way Linux and the programs that run on it are separate
 projects:
 
-  toolchain   leonix-toolchain: lxasm.py, the assembler for the virtual
+  toolchain   Leonix_toolchain: lxasm.py, the assembler for the virtual
               machine, used by "make check" and by coreutils
-  coreutils   leonix-coreutils: sh, ls, cat and the other programs that
+  coreutils   Leonix_coreutils: sh, ls, cat and the other programs that
               the kernel packs into /bin
 
 The directories themselves are not part of this repository.

@@ -57,7 +57,7 @@ $(TARGET).elf: $(OBJS)
 	test $$noinit_end -le $$(($(SRAM_END))) || { \
 		echo ".noinit ends past the end of SRAM"; rm -f $@; exit 1; }
 
-# /bin, packed from the programs leonix-coreutils builds.  The programs
+# /bin, packed from the programs Leonix_coreutils builds.  The programs
 # are rebuilt on every make; their own Makefile decides what is stale.
 ROMFS_PROGRAMS = $(notdir $(wildcard $(COREUTILS)/build/*))
 

@@ -20,8 +20,8 @@ init/init.c, 程序与汇编器分别在另外两个仓库中.
   仓库                 内容                                 在本仓库中的位置
   ===================  ===================================  =================
   Leonix               内核, 包括虚拟机的解释器             本仓库
-  leonix-toolchain     汇编器 lxasm.py                      external/toolchain
-  leonix-coreutils     sh、ls、cat 等程序的源码             external/coreutils
+  Leonix_toolchain     汇编器 lxasm.py                      external/toolchain
+  Leonix_coreutils     sh、ls、cat 等程序的源码             external/coreutils
   ===================  ===================================  =================
 
 划分沿用 Linux 的生态: 内核、binutils 与 GNU coreutils 是三个独立的项目.
@@ -166,7 +166,7 @@ ps、dmesg 与 uptime 需要任务状态、内核日志与运行时间, 这些�
 编写一个程序
 ============
 
-程序以汇编写成, 放在 leonix-coreutils 的 src/ 中, 在 Makefile 的 PROGRAMS
+程序以汇编写成, 放在 Leonix_coreutils 的 src/ 中, 在 Makefile 的 PROGRAMS
 中加入名字即可. 一个最小的程序::
 
   ; hello: 输出一行
@@ -184,7 +184,7 @@ ps、dmesg 与 uptime 需要任务状态、内核日志与运行时间, 这些�
 lib.s 提供参数、字符串、十进制输出与错误信息等例程, 每个程序在末尾包含
 lib.s, 程序自己的第一条指令因此就是入口. 汇编语法见 lxasm.py 的文件头.
 
-内核编译时运行 leonix-coreutils 的 make, 再以 tools/mkromfs.py 把 build/
+内核编译时运行 Leonix_coreutils 的 make, 再以 tools/mkromfs.py 把 build/
 中的全部程序打包为 /bin.
 
 
@@ -229,5 +229,5 @@ write 系统调用, 以及向代码写入、栈下溢、除以零、越过数据
 - 程序只能以汇编编写, 没有编译器.
 - 没有进程, 程序不能与 shell 并发运行, 也没有管道.
 - 解释器、驱动与内核仍是原生代码, 一个内核缺陷照样可以破坏一切.
-- leonix-toolchain 与 leonix-coreutils 尚无远程仓库, 也还没有拉取子仓库的
+- Leonix_toolchain 与 Leonix_coreutils 尚无远程仓库, 也还没有拉取子仓库的
   配置文件.

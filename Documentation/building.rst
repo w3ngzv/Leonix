@@ -106,11 +106,11 @@ Microsoft 的文档要求另装 usbipd-win 才能把设备交给 WSL. 板子每�
 内核之外的两个仓库须先检出到 external/ 下, 见 external/README:
 
 external/toolchain
-  leonix-toolchain, 虚拟机的汇编器. ``make`` 与 ``make check`` 都要用到,
+  Leonix_toolchain, 虚拟机的汇编器. ``make`` 与 ``make check`` 都要用到,
   需要 Python 3.
 
 external/coreutils
-  leonix-coreutils, /bin 中的程序. ``make`` 先在其中运行 make, 再把编出的
+  Leonix_coreutils, /bin 中的程序. ``make`` 先在其中运行 make, 再把编出的
   程序打包进映像.
 
 两个仓库目前只在本地. 路径也可以由 TOOLCHAIN 与 COREUTILS 两个变量指定.
@@ -141,7 +141,7 @@ leonix.map
 ``make check``
   在开发机上运行格式化函数、lxfs 与虚拟机的测试, 不需要板子. 需要主机的
   C 编译器, 默认为 ``cc``, 可用 HOSTCC 指定, 以及汇编测试程序用的
-  leonix-toolchain. 每组测试通过时输出一行 ``passed``.
+  Leonix_toolchain. 每组测试通过时输出一行 ``passed``.
 
 ``make clean``
   删除全部生成的文件.

@@ -8,7 +8,7 @@
 ttyACM0 上, 用于在板子运行时查看任务状态、栈余量与内核日志. shell 之下有
 两层: 字符设备表提供与具体驱动无关的读写入口, 终端行规程把逐键到达的输入
 整理成行. 代码在 fs/char_dev.c 与 drivers/tty.c, shell 本身是
-leonix-coreutils 中的 /bin/sh.
+Leonix_coreutils 中的 /bin/sh.
 
 
 使用

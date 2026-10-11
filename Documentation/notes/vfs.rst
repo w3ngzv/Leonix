@@ -185,7 +185,7 @@ test_lxfs.c 以一块初值为 0xff 的 1 KiB 数组代替 EEPROM, 在开发机�
 Flash 中的只读文件系统 romfs, 文件内容是虚拟机的程序, 函数表与 binfs 随之
 删除. 程序、虚拟机与 exec() 见 vm.rst.
 
-romfs 在内核编译时由 tools/mkromfs.py 生成: leonix-coreutils 编出的每个
+romfs 在内核编译时由 tools/mkromfs.py 生成: Leonix_coreutils 编出的每个
 程序成为一个 PROGMEM 数组, 连同文件名列在一张表中. 文件可以读出, 例如
 ``cat /bin/ls`` 读出的是 ls 的字节码, 也可以经 ``peek()`` 按偏移读取单个
 字节, 虚拟机就是这样取指令的. 写入与创建返回 EROFS. 这一做法与 Linux 以
