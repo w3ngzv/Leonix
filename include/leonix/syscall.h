@@ -6,7 +6,7 @@
  * System call numbers, the operand of the SYS instruction.  Arguments
  * are pushed in the order of the C prototype and the result replaces
  * them; errors are negative errno values, as Linux returns them before
- * libc turns them into errno.  leonix-toolchain carries a copy of this
+ * libc turns them into errno.  Leonix_toolchain carries a copy of this
  * table, and VM_VERSION in vm.h changes whenever it does.
  *
  *   exit(status)                  no return
