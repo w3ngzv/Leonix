@@ -110,15 +110,27 @@ fuses:
 	$(AVRDUDE) -U lfuse:r:-:h -U hfuse:r:-:h -U efuse:r:-:h -U lock:r:-:h
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) $(TARGET).elf $(TARGET).hex $(TARGET).map $(TEST_BIN)
+	rm -f $(OBJS) $(OBJS:.o=.d) $(TARGET).elf $(TARGET).hex $(TARGET).map $(TEST_BIN) \
+		$(TEST_VM_PROGS)
 
 # Host tests of the code in lib/, which has no AVR dependency.
 HOSTCC ?= cc
-TEST_BIN := tests/test_vsprintf tests/test_lxfs
+PYTHON ?= python3
+LXASM := $(PYTHON) tools/lxasm.py
+TEST_BIN := tests/test_vsprintf tests/test_lxfs tests/test_vm
+TEST_VM_PROGS := tests/vm/arith.lx tests/vm/fault.lx
 
-check: $(TEST_BIN)
+check: $(TEST_BIN) $(TEST_VM_PROGS)
 	./tests/test_vsprintf
 	./tests/test_lxfs
+	./tests/test_vm
+
+%.lx: %.s tools/lxasm.py
+	$(LXASM) $< $@
+
+tests/test_vm: tests/test_vm.c kernel/vm.c include/leonix/vm.h
+	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $@ \
+		tests/test_vm.c kernel/vm.c
 
 tests/test_vsprintf: tests/test_vsprintf.c lib/vsprintf.c include/leonix/kernel.h
 	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $@ \
