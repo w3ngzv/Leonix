@@ -28,8 +28,9 @@ small virtual machine in the kernel, which checks every memory access,
 so a program reaches the hardware only through system calls.  Files
 written with echo > file live in a small filesystem on the EEPROM.
 
-The programs and their assembler are separate repositories, checked out
-under external/; external/README names them.
+The programs and their assembler are separate repositories, git
+submodules under external/; clone with --recurse-submodules, or run
+"git submodule update --init" in an existing clone.
 
 printk() keeps the last 16 messages.  Opening the serial port replays
 them, then follows new ones and gives the shell prompt:

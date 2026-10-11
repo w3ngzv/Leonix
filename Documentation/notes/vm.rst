@@ -30,9 +30,9 @@ init/init.c, 程序与汇编器分别在另外两个仓库中.
 GNU 的 C 源码需要 C 库与远多于此的内存, 其许可证 GPLv3 也与本项目的
 GPLv2 (仅限该版本) 不相容.
 
-external/ 下的两个目录不属于本仓库, external/README 说明各自的来源. 内核
-的 Makefile 以 TOOLCHAIN 与 COREUTILS 两个变量指向这两个目录. 这两个仓库目前
-只在本地, 尚无远程地址.
+两个仓库以 git 子模块的形式检出在 external/ 下, 地址列在顶层的 .gitmodules
+中, 各自固定在内核最后一次构建与测试时的提交上, external/README 说明拉取
+的方法. 内核的 Makefile 以 TOOLCHAIN 与 COREUTILS 两个变量指向这两个目录.
 
 
 隔离由什么保证
@@ -229,5 +229,3 @@ write 系统调用, 以及向代码写入、栈下溢、除以零、越过数据
 - 程序只能以汇编编写, 没有编译器.
 - 没有进程, 程序不能与 shell 并发运行, 也没有管道.
 - 解释器、驱动与内核仍是原生代码, 一个内核缺陷照样可以破坏一切.
-- Leonix_toolchain 与 Leonix_coreutils 尚无远程仓库, 也还没有拉取子仓库的
-  配置文件.

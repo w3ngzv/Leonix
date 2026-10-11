@@ -1,10 +1,20 @@
 Everything outside the kernel lives in its own repository and is checked
-out here, the way Linux and the programs that run on it are separate
-projects:
+out here as a git submodule, the way Linux and the programs that run on
+it are separate projects.  .gitmodules in the top directory lists them:
 
   toolchain   Leonix_toolchain: lxasm.py, the assembler for the virtual
               machine, used by "make check" and by coreutils
   coreutils   Leonix_coreutils: sh, ls, cat and the other programs that
               the kernel packs into /bin
 
-The directories themselves are not part of this repository.
+Each submodule is pinned to the commit the kernel was last built and
+tested with.  To fetch them with a new clone:
+
+  git clone --recurse-submodules https://github.com/w3ngzv/Leonix.git
+
+or, in an existing clone:
+
+  git submodule update --init
+
+To move a submodule to a newer commit, check that commit out inside it,
+build and test the kernel, then commit the submodule path here.
