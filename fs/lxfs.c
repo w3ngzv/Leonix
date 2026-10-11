@@ -223,9 +223,30 @@ static int lxfs_write(struct file *f, const char *buf, uint8_t count)
 	return done ? done : -ENOSPC;
 }
 
+/*
+ * Byte @off of the file.  The chain is walked from the first block every
+ * time, at most 22 steps on this device; the virtual machine fetches its
+ * code this way when a program is run from lxfs.
+ */
+static int16_t lxfs_peek(struct file *f, uint16_t off)
+{
+	struct lxfs_dirent de;
+	uint8_t block, b;
+
+	dirent_get(f->private_data, &de);
+	if (off >= dirent_size(&de))
+		return -1;
+	block = de.first;
+	for (b = off / LXFS_BLOCK; b; b--)
+		block = fat_get(block);
+	dev_read(block * LXFS_BLOCK + off % LXFS_BLOCK, &b, 1);
+	return b;
+}
+
 static const struct file_operations lxfs_file_fops = {
 	.read = lxfs_read,
 	.write = lxfs_write,
+	.peek = lxfs_peek,
 };
 
 /*
@@ -294,10 +315,10 @@ int lxfs_open(struct file *f, const char *rest, uint16_t flags)
 
 	f->f_op = &lxfs_file_fops;
 	f->private_data = index;
-	if (flags & O_APPEND) {
-		dirent_get(index, &de);
-		f->f_pos = dirent_size(&de);
-	}
+	dirent_get(index, &de);
+	f->f_size = dirent_size(&de);
+	if (flags & O_APPEND)
+		f->f_pos = f->f_size;
 	return 0;
 }
 

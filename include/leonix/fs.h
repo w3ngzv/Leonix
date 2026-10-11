@@ -30,13 +30,16 @@ struct file;
  * bytes moved or a negative errno; read() on a device sleeps until at
  * least one byte is there, and returns 0 at the end of a file.
  * readdir() stores the next name in a directory and returns 1, or 0
- * after the last.  A NULL member is an operation the file cannot do.
- * Only a task may call them.
+ * after the last.  peek() returns the byte at offset @off, or -1 past
+ * the end, without moving f_pos; the virtual machine fetches code with
+ * it, in place of the mmap() a Linux loader would use.  A NULL member
+ * is an operation the file cannot do.  Only a task may call them.
  */
 struct file_operations {
 	int (*read)(struct file *f, char *buf, uint8_t count);
 	int (*write)(struct file *f, const char *buf, uint8_t count);
 	int (*readdir)(struct file *f, char *name, uint8_t size);
+	int16_t (*peek)(struct file *f, uint16_t off);
 	void (*release)(struct file *f);
 };
 
@@ -44,6 +47,7 @@ struct file {
 	const struct file_operations *f_op;	/* NULL while the slot is free */
 	uint16_t f_pos;
 	uint16_t f_flags;
+	uint16_t f_size;			/* at open, for regular files */
 	uint8_t private_data;			/* the filesystem's own use */
 };
 
@@ -58,6 +62,7 @@ struct mount {
 	int (*unlink)(const char *rest);
 };
 
+int vfs_open(struct file *f, const char *path, uint16_t flags);
 int register_chrdev(const char *name, const struct file_operations *fops);
 int devfs_open(struct file *f, const char *rest, uint16_t flags);
 

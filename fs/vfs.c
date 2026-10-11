@@ -14,7 +14,8 @@
 #include <stddef.h>
 #include <string.h>
 
-#include <leonix/binfs.h>
+#include <leonix/procfs.h>
+#include <leonix/romfs.h>
 #include <leonix/errno.h>
 #include <leonix/lxfs.h>
 #include <leonix/tty.h>
@@ -22,11 +23,13 @@
 
 static const char dev_path[] PROGMEM = "/dev";
 static const char bin_path[] PROGMEM = "/bin";
+static const char proc_path[] PROGMEM = "/proc";
 static const char root_path[] PROGMEM = "/";
 
 static const struct mount mounts[] = {
-	{ bin_path, binfs_open, NULL },
+	{ bin_path, romfs_open, NULL },
 	{ dev_path, devfs_open, NULL },
+	{ proc_path, procfs_open, NULL },
 	{ root_path, lxfs_open, lxfs_unlink },	/* last */
 };
 
@@ -90,26 +93,26 @@ static struct file *get_file(int fd)
 	return &files[fd];
 }
 
-int open(const char *path, uint16_t flags)
+/*
+ * Open @path into @f, which need not be in the descriptor table: the
+ * kernel opens the code of a program this way.  Returns 0 or a negative
+ * errno, with f->f_op NULL on failure.
+ */
+int vfs_open(struct file *f, const char *path, uint16_t flags)
 {
 	const struct mount *mnt;
 	const char *rest;
-	struct file *f;
-	int fd, err;
+	int err;
 
 	path = absolute(path);
-	for (fd = 0; fd < MAX_FDS && files[fd].f_op; fd++)
-		;
-	if (fd == MAX_FDS)
-		return -EMFILE;
-	f = &files[fd];
 	f->f_pos = 0;
 	f->f_flags = flags;
+	f->f_size = 0;
 	f->private_data = 0;
 
 	if (!strcmp_P(path, PSTR("/"))) {
 		f->f_op = &root_fops;
-		return fd;
+		return 0;
 	}
 	mnt = lookup_mount(path, &rest);
 	err = mnt->open(f, rest, flags);
@@ -118,10 +121,24 @@ int open(const char *path, uint16_t flags)
 		return err;
 	}
 	if ((flags & O_DIRECTORY) && !f->f_op->readdir) {
-		close(fd);
+		if (f->f_op->release)
+			f->f_op->release(f);
+		f->f_op = NULL;
 		return -ENOTDIR;
 	}
-	return fd;
+	return 0;
+}
+
+int open(const char *path, uint16_t flags)
+{
+	int fd, err;
+
+	for (fd = 0; fd < MAX_FDS && files[fd].f_op; fd++)
+		;
+	if (fd == MAX_FDS)
+		return -EMFILE;
+	err = vfs_open(&files[fd], path, flags);
+	return err < 0 ? err : fd;
 }
 
 int close(int fd)
