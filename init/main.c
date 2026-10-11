@@ -13,57 +13,17 @@
 
 /*
  * Sized from what sched_stack_free() reads on the board, with the
- * measurements in Documentation/notes/scheduler.rst.  Recheck them on
- * the stack page after any change to a task.
+ * measurements in Documentation/notes/scheduler.rst.  Recheck them with
+ * ps after any change to a task.
  */
-#define TASK_STACK_SIZE		96
 #define LCD_TASK_STACK_SIZE	224
 #define INIT_STACK_SIZE		318
-#define TX_BLINK_HALF_PERIOD	(HZ / 8)
 #define RX_ERROR_HALF_PERIOD	(HZ / 20)
 #define LCD_RETRY_INTERVAL	(HZ / 2)
 
 
-/*
- * Kept as a writable global so it lands in .data and the copy loop in
- * start.S has something to copy.  A wrong copy shows up as a wrong
- * blink rate.
- */
-uint16_t blink_half_period = HZ / 2;
-
-static uint8_t blink_l_stack[TASK_STACK_SIZE];
-static uint8_t blink_tx_stack[TASK_STACK_SIZE];
 static uint8_t lcd_stack[LCD_TASK_STACK_SIZE] __task_stack;
 static uint8_t init_stack[INIT_STACK_SIZE] __task_stack;
-
-/*
- * Each LED task sleeps until its next toggle.  The deadline advances by
- * a fixed period from the previous one, not from the time the task woke,
- * so the rate does not drift by however late a wake-up was.
- */
-static void blink_l(void)
-{
-	uint32_t next_toggle = get_jiffies();
-
-	DDRC |= 1 << DDC7;
-	for (;;) {
-		next_toggle += blink_half_period;
-		sleep_until(next_toggle);
-		PINC = 1 << PINC7;
-	}
-}
-
-static void blink_tx(void)
-{
-	uint32_t next_toggle = get_jiffies();
-
-	DDRD |= 1 << DDD5;
-	for (;;) {
-		next_toggle += TX_BLINK_HALF_PERIOD;
-		sleep_until(next_toggle);
-		PIND = 1 << PIND5;
-	}
-}
 
 /*
  * Format one line, or part of one, and write it at (@col, @row).
@@ -222,14 +182,26 @@ static void lcd_task(void)
 	}
 }
 
+/*
+ * The L and TX LEDs are off while the system runs; panic() lights them.
+ * After a power-on reset the pins are inputs, and the L LED is driven
+ * through a buffer from PC7, so a floating pin is not left to decide.
+ * L lights on high, TX on low (Documentation/booting.rst, section 4).
+ */
+static void leds_off(void)
+{
+	DDRC |= 1 << DDC7;
+	PORTD |= 1 << PORTD5;
+	DDRD |= 1 << DDD5;
+}
+
 int main(void)
 {
 	time_init();
 	printk("Leonix booted");
 	if (eeprom_fs_init())
 		printk("mkfs lxfs");
-	task_create(blink_l, blink_l_stack, sizeof(blink_l_stack));
-	task_create(blink_tx, blink_tx_stack, sizeof(blink_tx_stack));
+	leds_off();
 	task_create(lcd_task, lcd_stack, sizeof(lcd_stack));
 	if (usb_init() < 0)
 		printk("usb init failed");

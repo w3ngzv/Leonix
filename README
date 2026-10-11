@@ -18,12 +18,11 @@ Status
 
 A 1 ms Timer1 tick drives a preemptive round-robin scheduler.  Tasks
 sleep until a deadline instead of spinning, and an idle task puts the
-CPU into Idle mode when none can run.  main() starts three tasks: two
-blink the L and TX LEDs, the third drives an HD44780 LCD through a
-PCF8574 I2C backpack, showing the uptime and how idle the CPU is, and
-reinitialises it after the backpack is unplugged and plugged back.
-A fourth task runs the USB device, and a fifth user space: /bin/sh on
-the USB serial port.  The shell and every command are programs for a
+CPU into Idle mode when none can run.  main() starts three tasks.  The
+first drives an HD44780 LCD through a PCF8574 I2C backpack, showing the
+uptime and how idle the CPU is, and reinitialises it after the backpack
+is unplugged and plugged back.  The second runs the USB device, and the
+third user space: /bin/sh on the USB serial port.  The shell and every command are programs for a
 small virtual machine in the kernel, which checks every memory access,
 so a program reaches the hardware only through system calls.  Files
 written with echo > file live in a small filesystem on the EEPROM.
