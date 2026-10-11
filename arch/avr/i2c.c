@@ -58,9 +58,9 @@ static struct mutex bus_lock = MUTEX_INIT;
  * every START to time out; a pulled-up one answers with a fast NACK.
  *
  * Every PORTD and DDRD change in this file touches a single bit, which
- * avr-gcc emits as one sbi or cbi.  blink_tx writes PIND on the same
- * port from another task, and an in/ori/out sequence here could be
- * switched out halfway and write back a stale PORTD5.
+ * avr-gcc emits as one sbi or cbi.  Other code may own other bits of
+ * the same port, and an in/ori/out sequence here could be switched out
+ * halfway and write back a stale bit.
  *
  * The reset would cut off a transfer another task has in flight, so it
  * runs under bus_lock.  panic() calls this too, possibly while the lock
