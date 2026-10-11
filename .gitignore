@@ -13,3 +13,7 @@ node_modules/
 Documentation/output/
 tests/test_vsprintf
 tests/test_lxfs
+tests/test_vm
+*.lx
+external/*/
+fs/romfs_image.c

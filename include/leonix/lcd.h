@@ -8,7 +8,6 @@
 #define LCD_ROWS	2
 
 int lcd_init(void);
-int lcd_clear(void);
 int lcd_set_cursor(uint8_t col, uint8_t row);
 int lcd_puts(const char *s);
 int lcd_check(void);

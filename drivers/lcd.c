@@ -99,6 +99,14 @@ static int pcf_probe(void)
 	return -1;
 }
 
+static int lcd_clear(void)
+{
+	if (lcd_command(LCD_CLEAR) < 0)
+		return -1;
+	lcd_delay(LCD_CLEAR_MS);
+	return 0;
+}
+
 /*
  * Follows HD44780U figure 24.  The display may have been left in 4-bit
  * mode by an earlier run, with half a byte already latched, so the
@@ -130,14 +138,6 @@ int lcd_init(void)
 	    lcd_command(LCD_ENTRY_INC) < 0 ||
 	    lcd_command(LCD_DISPLAY_ON) < 0)
 		return -1;
-	return 0;
-}
-
-int lcd_clear(void)
-{
-	if (lcd_command(LCD_CLEAR) < 0)
-		return -1;
-	lcd_delay(LCD_CLEAR_MS);
 	return 0;
 }
 
