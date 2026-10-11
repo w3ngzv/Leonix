@@ -80,10 +80,11 @@ LED 常亮, 液晶屏显示 "PANIC bad irq". 一个被打开却没有处理程�
 1. 清零 r1 与 SREG. r1 按 avr-gcc 的约定清零. 写入 SREG 的 0 同时清除了
    I 标志. Caterina 跳转之前已经关闭中断, 这里再次清除, 使启动代码不依赖
    bootloader 的行为.
-2. 把 SP 设为 RAMEND, 即 SRAM 的最高地址 0x0aff. AVR 的栈向低地址增长,
-   从最高地址开始, 栈可以使用 ``.bss`` 之上的全部 SRAM. 硬件复位时 SP 的
-   初值本来就是 RAMEND, 但 Caterina 运行过之后, SP 的值取决于 Caterina
-   自身的执行路径.
+2. 把 SP 设为 0x07ff, 即 boot key 之下的第一个字节. AVR 的栈向低地址
+   增长. 提交 b400b45 之前 SP 设为 RAMEND (0x0aff); 之后 boot key 之上
+   放着三个任务的栈, 启动栈因此移到其下, 详见 vfs.rst 的"腾出 SRAM"一节.
+   硬件复位时 SP 的初值是 RAMEND, 但 Caterina 运行过之后, SP 的值取决于
+   Caterina 自身的执行路径, 启动代码因此总是重新设置.
 3. 把 USB 控制器与 PLL 写回复位值. 按下复位键之后, Caterina 会把仍在运行的
    USB 控制器交给应用, 而启动代码无法判断自己经由哪条路径进入. 这五条
    写入的依据见 booting.rst 第 3 节.

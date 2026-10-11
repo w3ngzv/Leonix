@@ -23,6 +23,13 @@
  */
 #define TASK_STACK_RESERVE	64
 
+/*
+ * Puts a stack in .noinit, above the boot key, see memlayout.h.  avr-gcc
+ * gives .noinit sections no contents, so they cost no flash, and the
+ * start code does not zero them; task_create() fills the stack anyway.
+ */
+#define __task_stack	__attribute__((section(".noinit.stacks")))
+
 enum task_state {
 	TASK_RUNNABLE,
 	TASK_SLEEPING,		/* until wake_at, or until woken */

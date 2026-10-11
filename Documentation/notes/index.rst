@@ -24,3 +24,4 @@
    printk
    usb
    shell
+   vfs

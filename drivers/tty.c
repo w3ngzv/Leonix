@@ -12,6 +12,7 @@
  *
  * There is one terminal, on the one serial port the board has.
  */
+#include <stddef.h>
 #include <string.h>
 
 #include <leonix/tty.h>
@@ -27,7 +28,7 @@ static uint8_t tty_pos;		/* bytes already handed to readers */
 
 static void echo(const char *s, uint8_t len)
 {
-	tty_raw->write(s, len);
+	tty_raw->write(NULL, s, len);
 }
 
 /* Fill tty_line with the next line from the terminal. */
@@ -38,7 +39,7 @@ static void tty_get_line(void)
 	char c;
 
 	for (;;) {
-		tty_raw->read(&c, 1);
+		tty_raw->read(NULL, &c, 1);
 		if (c == '\n' && last == '\r') {
 			last = c;
 			continue;
@@ -75,10 +76,11 @@ static void tty_get_line(void)
  * Return the rest of the current line, at most @count bytes of it,
  * reading a new line first if none is left.  Only one task may read.
  */
-static int tty_read(char *buf, uint8_t count)
+static int tty_read(struct file *f, char *buf, uint8_t count)
 {
 	uint8_t n;
 
+	(void)f;
 	if (tty_pos == tty_len)
 		tty_get_line();
 	n = tty_len - tty_pos;
@@ -89,18 +91,19 @@ static int tty_read(char *buf, uint8_t count)
 	return n;
 }
 
-static int tty_write(const char *buf, uint8_t count)
+static int tty_write(struct file *f, const char *buf, uint8_t count)
 {
 	uint8_t start = 0, i;
 
+	(void)f;
 	for (i = 0; i < count; i++) {
 		if (buf[i] != '\n')
 			continue;
-		tty_raw->write(buf + start, i - start);
-		tty_raw->write("\r\n", 2);
+		tty_raw->write(NULL, buf + start, i - start);
+		tty_raw->write(NULL, "\r\n", 2);
 		start = i + 1;
 	}
-	tty_raw->write(buf + start, count - start);
+	tty_raw->write(NULL, buf + start, count - start);
 	return count;
 }
 
@@ -111,7 +114,7 @@ static const struct file_operations tty_fops = {
 
 /*
  * Put the line discipline over @raw and register the result as @name, a
- * string in flash.  Returns -1 if a terminal exists already or the
+ * string in flash.  @raw is called with no struct file.  Returns -1 if a terminal exists already or the
  * device table is full.
  */
 int tty_register(const char *name, const struct file_operations *raw)

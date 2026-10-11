@@ -9,9 +9,16 @@ APP_FLASH_SIZE := 28672
 # The baud rate that sends a running Leonix to the bootloader.
 BOOTLOADER_BAUD := 1200
 
+# The programs of /bin, listed in bin/programs.c.
+BIN_OBJS := bin/programs.o bin/cat.o bin/df.o bin/dmesg.o bin/echo.o \
+	bin/help.o bin/ls.o bin/ps.o bin/rm.o bin/uptime.o
+
 OBJS := arch/avr/start.o arch/avr/switch.o arch/avr/time.o arch/avr/i2c.o \
 	arch/avr/usb.o arch/avr/panic.o kernel/sched.o kernel/printk.o \
-	fs/char_dev.o drivers/tty.o drivers/lcd.o lib/vsprintf.o init/shell.o init/main.o
+	fs/char_dev.o fs/vfs.o fs/lxfs.o fs/binfs.o drivers/tty.o \
+	drivers/eeprom.o drivers/lcd.o lib/vsprintf.o lib/dprintf.o init/shell.o \
+	init/main.o $(BIN_OBJS)
+
 
 CC      := avr-gcc
 OBJCOPY := avr-objcopy
@@ -22,8 +29,17 @@ SIZE    := avr-size
 CPPFLAGS := -DF_CPU=$(F_CPU) -Iinclude
 CFLAGS   := -mmcu=$(MCU) -std=c11 -Os -g -Wall -Wextra -Werror
 ASFLAGS  := -mmcu=$(MCU) -g -Wall -Werror
+# SRAM layout, see include/leonix/memlayout.h; data addresses carry the
+# linker's 0x800000 offset.  The boot stack between .bss and the boot key
+# must hold main() and panic(), about 90 bytes each by -fstack-usage.
+BOOT_KEY_ADDR     := 0x800800
+TASK_STACKS_START := 0x800802
+SRAM_END          := 0x800b00
+BOOT_STACK_MIN    := 128
+
 LDFLAGS  := -mmcu=$(MCU) -nostartfiles \
 	    -Wl,--defsym=__TEXT_REGION_LENGTH__=$(APP_FLASH_SIZE) \
+	    -Wl,--section-start=.noinit=$(TASK_STACKS_START) \
 	    -Wl,-Map=$(TARGET).map
 
 all: $(TARGET).hex
@@ -34,14 +50,15 @@ all: $(TARGET).hex
 %.o: %.S
 	$(CC) $(CPPFLAGS) $(ASFLAGS) -MMD -MP -c -o $@ $<
 
-# Caterina's boot key is at SRAM 0x0800, see arch/avr/usb.c.
-BOOT_KEY_ADDR := 0x800800
-
 $(TARGET).elf: $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^
 	@bss_end=$$($(NM) $@ | awk '$$3 == "__bss_end" { print $$1 }'); \
-	test $$((0x$$bss_end)) -le $$(($(BOOT_KEY_ADDR))) || { \
-		echo ".bss ends at 0x$$bss_end, past the boot key"; rm -f $@; exit 1; }
+	set -- $$($(OBJDUMP) -h $@ | awk '$$2 == ".noinit" { print $$3, $$4 }'); \
+	noinit_end=$$((0x$$1 + 0x$$2)); \
+	test $$((0x$$bss_end + $(BOOT_STACK_MIN))) -le $$(($(BOOT_KEY_ADDR))) || { \
+		echo ".bss ends at 0x$$bss_end, too close to the boot key"; rm -f $@; exit 1; }; \
+	test $$noinit_end -le $$(($(SRAM_END))) || { \
+		echo ".noinit ends past the end of SRAM"; rm -f $@; exit 1; }
 
 $(TARGET).hex: $(TARGET).elf
 	$(OBJCOPY) -O ihex -R .eeprom $< $@
@@ -97,14 +114,19 @@ clean:
 
 # Host tests of the code in lib/, which has no AVR dependency.
 HOSTCC ?= cc
-TEST_BIN := tests/test_vsprintf
+TEST_BIN := tests/test_vsprintf tests/test_lxfs
 
 check: $(TEST_BIN)
-	./$(TEST_BIN)
+	./tests/test_vsprintf
+	./tests/test_lxfs
 
-$(TEST_BIN): tests/test_vsprintf.c lib/vsprintf.c include/leonix/kernel.h
+tests/test_vsprintf: tests/test_vsprintf.c lib/vsprintf.c include/leonix/kernel.h
 	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $@ \
 		tests/test_vsprintf.c lib/vsprintf.c
+
+tests/test_lxfs: tests/test_lxfs.c fs/lxfs.c include/leonix/lxfs.h include/leonix/fs.h
+	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $@ \
+		tests/test_lxfs.c fs/lxfs.c
 
 # HTML documentation in Documentation/output, as "make htmldocs" in Linux.
 # Missing Sphinx only skips the docs; the firmware build does not need it.
