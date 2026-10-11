@@ -115,8 +115,10 @@ clean:
 
 # Host tests of the code in lib/, which has no AVR dependency.
 HOSTCC ?= cc
+# Repositories outside the kernel, see external/README.
+TOOLCHAIN ?= external/toolchain
 PYTHON ?= python3
-LXASM := $(PYTHON) tools/lxasm.py
+LXASM := $(PYTHON) $(TOOLCHAIN)/lxasm.py
 TEST_BIN := tests/test_vsprintf tests/test_lxfs tests/test_vm
 TEST_VM_PROGS := tests/vm/arith.lx tests/vm/fault.lx
 
@@ -125,7 +127,7 @@ check: $(TEST_BIN) $(TEST_VM_PROGS)
 	./tests/test_lxfs
 	./tests/test_vm
 
-%.lx: %.s tools/lxasm.py
+%.lx: %.s $(TOOLCHAIN)/lxasm.py
 	$(LXASM) $< $@
 
 tests/test_vm: tests/test_vm.c kernel/vm.c include/leonix/vm.h
