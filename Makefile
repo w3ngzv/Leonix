@@ -9,15 +9,12 @@ APP_FLASH_SIZE := 28672
 # The baud rate that sends a running Leonix to the bootloader.
 BOOTLOADER_BAUD := 1200
 
-# The programs of /bin, listed in bin/programs.c.
-BIN_OBJS := bin/programs.o bin/cat.o bin/df.o bin/dmesg.o bin/echo.o \
-	bin/help.o bin/ls.o bin/ps.o bin/rm.o bin/uptime.o
-
 OBJS := arch/avr/start.o arch/avr/switch.o arch/avr/time.o arch/avr/i2c.o \
 	arch/avr/usb.o arch/avr/panic.o kernel/sched.o kernel/printk.o \
-	fs/char_dev.o fs/vfs.o fs/lxfs.o fs/binfs.o fs/procfs.o drivers/tty.o \
+	fs/char_dev.o fs/vfs.o fs/lxfs.o fs/romfs.o fs/romfs_image.o \
+	fs/procfs.o kernel/vm.o kernel/exec.o drivers/tty.o \
 	drivers/eeprom.o drivers/lcd.o lib/vsprintf.o lib/dprintf.o init/shell.o \
-	init/main.o $(BIN_OBJS)
+	init/main.o
 
 
 CC      := avr-gcc
@@ -59,6 +56,19 @@ $(TARGET).elf: $(OBJS)
 		echo ".bss ends at 0x$$bss_end, too close to the boot key"; rm -f $@; exit 1; }; \
 	test $$noinit_end -le $$(($(SRAM_END))) || { \
 		echo ".noinit ends past the end of SRAM"; rm -f $@; exit 1; }
+
+# /bin, packed from the programs leonix-coreutils builds.  The programs
+# are rebuilt on every make; their own Makefile decides what is stale.
+ROMFS_PROGRAMS = $(notdir $(wildcard $(COREUTILS)/build/*))
+
+coreutils:
+	@test -f $(COREUTILS)/Makefile || { \
+		echo "$(COREUTILS) is missing, see external/README"; exit 1; }
+	$(MAKE) -C $(COREUTILS) TOOLCHAIN=$(TOOLCHAIN) PYTHON=$(PYTHON)
+
+fs/romfs_image.c: coreutils tools/mkromfs.py
+	$(PYTHON) tools/mkromfs.py $@ \
+		$(foreach p,$(ROMFS_PROGRAMS),$(p)=$(COREUTILS)/build/$(p))
 
 $(TARGET).hex: $(TARGET).elf
 	$(OBJCOPY) -O ihex -R .eeprom $< $@
@@ -111,12 +121,13 @@ fuses:
 
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) $(TARGET).elf $(TARGET).hex $(TARGET).map $(TEST_BIN) \
-		$(TEST_VM_PROGS)
+		$(TEST_VM_PROGS) fs/romfs_image.c
 
 # Host tests of the code in lib/, which has no AVR dependency.
 HOSTCC ?= cc
 # Repositories outside the kernel, see external/README.
-TOOLCHAIN ?= external/toolchain
+TOOLCHAIN ?= $(CURDIR)/external/toolchain
+COREUTILS ?= external/coreutils
 PYTHON ?= python3
 LXASM := $(PYTHON) $(TOOLCHAIN)/lxasm.py
 TEST_BIN := tests/test_vsprintf tests/test_lxfs tests/test_vm
@@ -158,4 +169,4 @@ cleandocs:
 
 -include $(OBJS:.o=.d)
 
-.PHONY: all disasm size flash fuses clean check htmldocs cleandocs
+.PHONY: all disasm size flash fuses clean coreutils check htmldocs cleandocs

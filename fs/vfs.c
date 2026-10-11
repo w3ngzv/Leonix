@@ -14,8 +14,8 @@
 #include <stddef.h>
 #include <string.h>
 
-#include <leonix/binfs.h>
 #include <leonix/procfs.h>
+#include <leonix/romfs.h>
 #include <leonix/errno.h>
 #include <leonix/lxfs.h>
 #include <leonix/tty.h>
@@ -27,7 +27,7 @@ static const char proc_path[] PROGMEM = "/proc";
 static const char root_path[] PROGMEM = "/";
 
 static const struct mount mounts[] = {
-	{ bin_path, binfs_open, NULL },
+	{ bin_path, romfs_open, NULL },
 	{ dev_path, devfs_open, NULL },
 	{ proc_path, procfs_open, NULL },
 	{ root_path, lxfs_open, lxfs_unlink },	/* last */
