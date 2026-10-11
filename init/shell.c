@@ -14,8 +14,8 @@
 #include <avr/pgmspace.h>
 #include <string.h>
 
-#include <leonix/binfs.h>
 #include <leonix/errno.h>
+#include <leonix/exec.h>
 #include <leonix/sched.h>
 #include <leonix/shell.h>
 #include <leonix/stdio.h>
@@ -111,6 +111,8 @@ static void run(char *line)
 		restore_stdout();
 	if (err == -ENOENT)
 		dprintf(STDOUT_FILENO, "sh: %s: not found\n", argv[0]);
+	else if (err == -ENOEXEC)
+		dprintf(STDOUT_FILENO, "sh: %s: not a program\n", argv[0]);
 }
 
 /* The terminal hands over a whole line, '\n' included, in one read(). */
