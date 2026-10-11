@@ -21,7 +21,8 @@ L 与 TX 两个 LED 闪烁, 第三个经 PCF8574 I2C 背板驱动 HD44780 液晶
 命令都是内核中一台小型虚拟机的程序, 虚拟机检查每一次访存, 程序只能经由
 系统调用访问硬件. 以 echo > 文件 写入的文件保存在 EEPROM 上的小型文件系统中.
 
-程序与汇编器是单独的仓库, 检出在 external/ 下, 见 external/README.
+程序与汇编器是单独的仓库, 作为 git 子模块检出在 external/ 下. 克隆时加
+--recurse-submodules, 已有的克隆中运行 git submodule update --init.
 
 printk() 保留最近 16 条消息. 打开串口时先回放这些消息, 之后实时输出新的
 消息并给出 shell 的提示符:

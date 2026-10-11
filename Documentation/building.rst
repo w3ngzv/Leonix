@@ -103,7 +103,9 @@ Microsoft 的文档要求另装 usbipd-win 才能把设备交给 WSL. 板子每�
 构建
 ====
 
-内核之外的两个仓库须先检出到 external/ 下, 见 external/README:
+内核之外的两个仓库以 git 子模块的形式检出到 external/ 下, 列在顶层的
+.gitmodules 中, 见 external/README. 克隆时加 ``--recurse-submodules``,
+已有的克隆中运行 ``git submodule update --init``:
 
 external/toolchain
   Leonix_toolchain, 虚拟机的汇编器. ``make`` 与 ``make check`` 都要用到,
@@ -113,7 +115,8 @@ external/coreutils
   Leonix_coreutils, /bin 中的程序. ``make`` 先在其中运行 make, 再把编出的
   程序打包进映像.
 
-两个仓库目前只在本地. 路径也可以由 TOOLCHAIN 与 COREUTILS 两个变量指定.
+子模块固定在内核最后一次构建与测试时的提交上. 路径也可以由 TOOLCHAIN 与
+COREUTILS 两个变量指定.
 
 在仓库根目录运行::
 

@@ -1,0 +1,6 @@
+[submodule "external/toolchain"]
+	path = external/toolchain
+	url = https://github.com/w3ngzv/Leonix_toolchain.git
+[submodule "external/coreutils"]
+	path = external/coreutils
+	url = https://github.com/w3ngzv/Leonix_coreutils.git
