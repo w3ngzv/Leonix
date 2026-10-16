@@ -20,7 +20,7 @@
 #define INIT_STACK_SIZE		318
 #define RX_ERROR_HALF_PERIOD	(HZ / 20)
 #define LCD_RETRY_INTERVAL	(HZ / 2)
-
+// I fixed some bug
 
 static uint8_t lcd_stack[LCD_TASK_STACK_SIZE] __task_stack;
 static uint8_t init_stack[INIT_STACK_SIZE] __task_stack;
