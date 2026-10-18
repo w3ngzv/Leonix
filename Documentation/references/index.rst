@@ -150,6 +150,42 @@ STM32F10xxx-flash-PM0075-rev2.pdf
 
   https://www.st.com/resource/en/programming_manual/pm0075-stm32f10xxx-flash-memory-microcontrollers-stmicroelectronics.pdf
 
+ST-TN1433-rev7.pdf
+  STMicroelectronics, TN1433 Reference device marking schematics for STM32
+  microcontrollers and microprocessors, Rev 7, 2025 年 12 月. 4.3 节图 6
+  给出 LQFP48 丝印中日期码 Y WW 与修订码的位置. 2026-10-19 取自
+  st.com.cn, 下载时为 gzip 压缩. SHA-256
+  7897795146b86dd67a5770b92042260413773bfd8dcd2e47d96c297931e96797.
+
+  https://www.st.com.cn/resource/en/technical_note/tn1433-reference-device-marking-schematics-for-stm32-microcontrollers-and-microprocessors-stmicroelectronics.pdf
+
+Arm-CoreSight-IHI0029F.pdf
+  Arm, CoreSight Architecture Specification v3.0, ARM IHI 0029F, 2022 年
+  2 月. B2.2 节规定 PIDR 中 JEP106 代码的位置: DES_0 为 PIDR1[7:4],
+  DES_1 为 PIDR2[2:0], DES_2 为 PIDR4[3:0]. drivers/swd.c 的 JEP106 一行
+  依此解码. SHA-256
+  1ac6a79a85dd64b949e990ca9160ccaa71c582e4a189d46c81e802d662e992e0.
+
+  https://documentation-service.arm.com/static/622228598804d00769e9b23d
+
+Arm-ADIv5-IHI0031G.pdf
+  Arm, Arm Debug Interface Architecture Specification ADIv5.0 to ADIv5.2,
+  ARM IHI 0031G, 2022 年 2 月. SW-DP 的 CTRL/STAT 上电请求与应答位, 以及
+  ROM 表须实现 PIDR 的规定 (D1.3). 表 B3-10 给出 Arm 的 JEP106 代码:
+  continuation 0x4, identity 0x3B. SHA-256
+  3c7078cf71386e2abfe7b458c30d31de5c5388d894044dcb2adb8b8db2efffa9.
+
+  https://documentation-service.arm.com/static/622222b2e6f58973271ebc21
+
+JEDEC-JEP106AB.pdf
+  JEDEC, JEP106AB Standard Manufacturer's Identification Code, 2010 年
+  2 月. 第一组第 32 号 (0x20) 为 SGS/Thomson, 即 STMicroelectronics 的
+  前身; 第五组第 59 号 (0x3B) 为 ARM Ltd. jedec.org 下载需要登录, 该副本
+  取自镜像站, 现行修订版未取得. SHA-256
+  55c22a7631e54e75592fd0d14fadf80ff7c1638715ef6804f7bad550f12263cf.
+
+  https://docs.ampnuts.ru/eevblog.docs/Standards/DDR4/JEP106AB.pdf
+
 下列网页与源码文件于 2026-10-18 保存, 用于判断芯片真伪. 网页属二手资料,
 其中的结论在可行处已对照上面的 ST 文档复核.
 
