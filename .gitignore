@@ -16,3 +16,10 @@ tests/test_lxfs
 tests/test_vm
 *.lx
 fs/romfs_image.c
+*.lex.c
+*.tab.[ch]
+.config
+.config.old
+/include/config/
+/include/generated/
+/defconfig

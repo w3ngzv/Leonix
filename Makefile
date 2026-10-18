@@ -9,14 +9,51 @@ APP_FLASH_SIZE := 28672
 # The baud rate that sends a running Leonix to the bootloader.
 BOOTLOADER_BAUD := 1200
 
-OBJS := arch/avr/start.o arch/avr/switch.o arch/avr/time.o arch/avr/i2c.o \
-	arch/avr/usb.o arch/avr/panic.o kernel/sched.o kernel/printk.o \
-	fs/char_dev.o fs/vfs.o fs/lxfs.o fs/romfs.o fs/romfs_image.o \
-	fs/procfs.o kernel/vm.o kernel/exec.o drivers/tty.o \
-	drivers/eeprom.o drivers/lcd.o drivers/swd.o lib/vsprintf.o \
-	init/init.o \
-	init/main.o
+# The included auto.conf.cmd brings rules of its own, which must not
+# become the default goal; Linux declares __all first for the same reason.
+.DEFAULT_GOAL := all
 
+# Kconfig, as in Linux.  .config holds the choices; syncconfig turns it
+# into include/config/auto.conf, read below, and
+# include/generated/autoconf.h, included into every C file.
+export ARCH    := avr
+export SRCARCH := avr
+export srctree := .
+export KCONFIG_CONFIG ?= .config
+KBUILD_DEFCONFIG := leonardo_defconfig
+KCONF := scripts/kconfig/conf
+scripts_kconfig := $(MAKE) -f scripts/kconfig/Makefile
+
+config-targets := config menuconfig nconfig oldconfig olddefconfig \
+	defconfig %_defconfig savedefconfig allyesconfig allnoconfig \
+	alldefconfig listnewconfig syncconfig
+no-dot-config-targets := $(config-targets) clean mrproper check \
+	htmldocs cleandocs
+
+need-config := 1
+ifneq ($(MAKECMDGOALS),)
+ifeq ($(filter-out $(no-dot-config-targets),$(MAKECMDGOALS)),)
+need-config :=
+endif
+endif
+
+ifdef need-config
+include include/config/auto.conf
+-include include/config/auto.conf.cmd
+endif
+
+# Each directory lists its objects in its own Makefile as Linux's obj-y,
+# read here in place of Kbuild's descent into the directory.
+kbuild-dirs := arch/avr kernel fs drivers lib init
+
+define kbuild-dir
+obj-y :=
+include $(1)/Makefile
+OBJS += $$(addprefix $(1)/,$$(obj-y))
+endef
+
+OBJS :=
+$(foreach d,$(kbuild-dirs),$(eval $(call kbuild-dir,$(d))))
 
 CC      := avr-gcc
 OBJCOPY := avr-objcopy
@@ -24,7 +61,7 @@ OBJDUMP := avr-objdump
 NM      := avr-nm
 SIZE    := avr-size
 
-CPPFLAGS := -DF_CPU=$(F_CPU) -Iinclude
+CPPFLAGS := -DF_CPU=$(F_CPU) -Iinclude -include include/leonix/kconfig.h
 CFLAGS   := -mmcu=$(MCU) -std=c11 -Os -g -Wall -Wextra -Werror
 ASFLAGS  := -mmcu=$(MCU) -g -Wall -Werror
 # SRAM layout, see include/leonix/memlayout.h; data addresses carry the
@@ -35,7 +72,8 @@ TASK_STACKS_START := 0x800802
 SRAM_END          := 0x800b00
 BOOT_STACK_MIN    := 128
 
-LDFLAGS  := -mmcu=$(MCU) -nostartfiles \
+LDSCRIPT := arch/avr/leonix.lds
+LDFLAGS  := -mmcu=$(MCU) -nostartfiles -T $(LDSCRIPT) \
 	    -Wl,--defsym=__TEXT_REGION_LENGTH__=$(APP_FLASH_SIZE) \
 	    -Wl,--section-start=.noinit=$(TASK_STACKS_START) \
 	    -Wl,-Map=$(TARGET).map
@@ -48,8 +86,8 @@ all: $(TARGET).hex
 %.o: %.S
 	$(CC) $(CPPFLAGS) $(ASFLAGS) -MMD -MP -c -o $@ $<
 
-$(TARGET).elf: $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $^
+$(TARGET).elf: $(OBJS) $(LDSCRIPT)
+	$(CC) $(LDFLAGS) -o $@ $(OBJS)
 	@bss_end=$$($(NM) $@ | awk '$$3 == "__bss_end" { print $$1 }'); \
 	set -- $$($(OBJDUMP) -h $@ | awk '$$2 == ".noinit" { print $$3, $$4 }'); \
 	noinit_end=$$((0x$$1 + 0x$$2)); \
@@ -57,6 +95,43 @@ $(TARGET).elf: $(OBJS)
 		echo ".bss ends at 0x$$bss_end, too close to the boot key"; rm -f $@; exit 1; }; \
 	test $$noinit_end -le $$(($(SRAM_END))) || { \
 		echo ".noinit ends past the end of SRAM"; rm -f $@; exit 1; }
+
+$(KCONFIG_CONFIG):
+	@echo >&2 '***'
+	@echo >&2 '*** Configuration file "$@" not found!'
+	@echo >&2 '***'
+	@echo >&2 '*** Please run some configurator (e.g. "make $(KBUILD_DEFCONFIG)"'
+	@echo >&2 '*** or "make menuconfig").'
+	@echo >&2 '***'
+	@false
+
+include/config/auto.conf include/generated/autoconf.h: $(KCONFIG_CONFIG)
+	$(scripts_kconfig) conf
+	$(KCONF) --syncconfig Kconfig
+
+config:
+	$(scripts_kconfig) conf
+	$(KCONF) --oldaskconfig Kconfig
+
+menuconfig nconfig:
+	$(scripts_kconfig) $(@:config=conf)
+	scripts/kconfig/$(@:config=conf) Kconfig
+
+oldconfig olddefconfig allyesconfig allnoconfig alldefconfig listnewconfig \
+syncconfig:
+	$(scripts_kconfig) conf
+	$(KCONF) --$@ Kconfig
+
+defconfig: $(KBUILD_DEFCONFIG)
+
+%_defconfig:
+	$(scripts_kconfig) conf
+	$(KCONF) --defconfig=arch/$(SRCARCH)/configs/$@ Kconfig
+
+# The minimal configuration, to copy over arch/$(SRCARCH)/configs/.
+savedefconfig:
+	$(scripts_kconfig) conf
+	$(KCONF) --savedefconfig=defconfig Kconfig
 
 # /bin, packed from the programs Leonix_coreutils builds.  The programs
 # are rebuilt on every make; their own Makefile decides what is stale.
@@ -120,8 +195,15 @@ fuses:
 	$(enter_bootloader)
 	$(AVRDUDE) -U lfuse:r:-:h -U hfuse:r:-:h -U efuse:r:-:h -U lock:r:-:h
 
+# clean keeps .config, as in Linux; mrproper removes it as well.
+mrproper: clean
+	rm -rf $(KCONFIG_CONFIG) $(KCONFIG_CONFIG).old include/config \
+		include/generated defconfig
+	$(scripts_kconfig) clean
+
+# By directory, as Linux's clean: objects of options now off go too.
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) $(TARGET).elf $(TARGET).hex $(TARGET).map $(TEST_BIN) \
+	rm -f $(foreach d,$(kbuild-dirs),$(d)/*.o $(d)/*.d) $(TARGET).elf $(TARGET).hex $(TARGET).map $(TEST_BIN) \
 		$(TEST_VM_PROGS) fs/romfs_image.c
 
 # Host tests of the code in lib/, which has no AVR dependency.
@@ -170,4 +252,5 @@ cleandocs:
 
 -include $(OBJS:.o=.d)
 
-.PHONY: all disasm size flash fuses clean coreutils check htmldocs cleandocs
+.PHONY: all disasm size flash fuses clean mrproper coreutils check htmldocs \
+	cleandocs $(config-targets)

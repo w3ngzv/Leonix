@@ -30,8 +30,12 @@ printk() 保留最近 16 条消息. 打开串口时先回放这些消息, 之后
 
 以上功能均已在板子上运行. 液晶屏每秒刷新一次时, 显示的空闲比例为 99%.
 
+	make leonardo_defconfig
 	make
 	make flash PORT=/dev/cu.usbmodemXXXX
+
+与 Linux 一样, make menuconfig 选择编入哪些驱动, 见
+Documentation/building.rst.
 
 Leonix 运行时, make flash 自行使板子复位进入 bootloader. 板上是旧映像时,
 需要先按下复位键.

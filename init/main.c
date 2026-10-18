@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <avr/io.h>
+#include <avr/pgmspace.h>
 #include <util/atomic.h>
 
-#include <leonix/eeprom.h>
 #include <leonix/jiffies.h>
 #include <leonix/kernel.h>
 #include <leonix/lcd.h>
 #include <leonix/printk.h>
 #include <leonix/sched.h>
-#include <leonix/swd.h>
 #include <leonix/init.h>
 #include <leonix/usb.h>
 
@@ -17,13 +16,13 @@
  * measurements in Documentation/notes/scheduler.rst.  Recheck them with
  * ps after any change to a task.
  */
-#define LCD_TASK_STACK_SIZE	224
+#define STATUS_STACK_SIZE	224
 #define INIT_STACK_SIZE		318
 #define RX_ERROR_HALF_PERIOD	(HZ / 20)
 #define LCD_RETRY_INTERVAL	(HZ / 2)
 
 
-static uint8_t lcd_stack[LCD_TASK_STACK_SIZE] __task_stack;
+static uint8_t status_stack[STATUS_STACK_SIZE] __task_stack;
 static uint8_t init_stack[INIT_STACK_SIZE] __task_stack;
 
 /*
@@ -184,6 +183,23 @@ static void lcd_task(void)
 }
 
 /*
+ * Without CONFIG_HD44780, task 0 keeps only the stack reports.  Its
+ * stack stays the LCD task's size: at 128 and 144 bytes it overflowed
+ * on the board, a printk() with an interrupt frame on top going past
+ * what a short run had measured.
+ */
+static void stack_task(void)
+{
+	uint32_t next = get_jiffies();
+
+	for (;;) {
+		report_stack_usage();
+		next += HZ;
+		sleep_until(next);
+	}
+}
+
+/*
  * The L and TX LEDs are off while the system runs; panic() lights them.
  * After a power-on reset the pins are inputs, and the L LED is driven
  * through a buffer from PC7, so a floating pin is not left to decide.
@@ -196,16 +212,35 @@ static void leds_off(void)
 	DDRD |= 1 << DDD5;
 }
 
+extern const initcall_t __initcall_start[], __initcall_end[];
+
+/*
+ * Linux's do_initcalls(), without the per-level loop: the linker script
+ * has already sorted the table by level.  A failure is logged with the
+ * function's word address, to look up in leonix.map.
+ */
+void do_initcalls(void)
+{
+	const initcall_t *call;
+	initcall_t fn;
+	int ret;
+
+	for (call = __initcall_start; call < __initcall_end; call++) {
+		fn = (initcall_t)pgm_read_ptr(call);
+		ret = fn();
+		if (ret < 0)
+			printk("init %x %d", (uint16_t)fn, ret);
+	}
+}
+
 int main(void)
 {
 	time_init();
 	printk("Leonix booted");
-	if (eeprom_fs_init())
-		printk("mkfs lxfs");
 	leds_off();
-	if (swd_init() < 0)
-		printk("no /dev/swd");
-	task_create(lcd_task, lcd_stack, sizeof(lcd_stack));
+	do_initcalls();
+	task_create(IS_ENABLED(CONFIG_HD44780) ? lcd_task : stack_task,
+		    status_stack, sizeof(status_stack));
 	if (usb_init() < 0)
 		printk("usb init failed");
 	else if (init_start(init_stack, sizeof(init_stack)) < 0)
