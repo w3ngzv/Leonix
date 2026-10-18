@@ -118,6 +118,47 @@ external/coreutils
 子模块固定在内核最后一次构建与测试时的提交上. 路径也可以由 TOOLCHAIN 与
 COREUTILS 两个变量指定.
 
+配置
+----
+
+编入哪些驱动由仓库根目录的 .config 决定, 写法与 Linux 相同: 各目录的
+Kconfig 声明选项, 目录的 Makefile 以 ``obj-$(CONFIG_X) += x.o`` 决定编入
+的文件, C 代码以 ``IS_ENABLED(CONFIG_X)`` 判断. 配置工具是 Linux v6.8 的
+scripts/kconfig, 编译它需要主机上的 bison、flex 与 ncurses. Leonix 没有
+模块加载器, 选项只有 y 与 n 两种取值, 不能设为 m.
+
+第一次构建前, 由默认配置生成 .config::
+
+  make leonardo_defconfig
+
+默认配置 arch/avr/configs/leonardo_defconfig 打开 SWD 驱动, 关闭 I2C 与
+HD44780 液晶屏. 没有 .config 时 ``make`` 停下并提示先运行配置工具.
+
+修改配置的目标:
+
+``make menuconfig``
+  ncurses 菜单界面, 即 Linux 的 mconf. 在选项上按 ``?`` 显示其说明.
+
+``make nconfig``
+  另一种 ncurses 界面. 需要 ncurses 的 panel 与 menu 库, macOS 上要让
+  pkg-config 找到 Homebrew 的 ncurses::
+
+    PKG_CONFIG_PATH=$(brew --prefix ncurses)/lib/pkgconfig make nconfig
+
+``make oldconfig``, ``make olddefconfig``
+  Kconfig 增加了选项之后更新 .config, 前者逐项询问, 后者取默认值.
+
+``make savedefconfig``
+  把当前配置写成最小形式的 defconfig 文件, 用于更新
+  arch/avr/configs/leonardo_defconfig.
+
+配置改变之后, ``make`` 自动运行 syncconfig, 重新生成
+include/config/auto.conf 与 include/generated/autoconf.h, 并重新编译受影响
+的文件.
+
+编译
+----
+
 在仓库根目录运行::
 
   make
@@ -147,7 +188,11 @@ leonix.map
   Leonix_toolchain. 每组测试通过时输出一行 ``passed``.
 
 ``make clean``
-  删除全部生成的文件.
+  删除编译生成的文件, 保留 .config.
+
+``make mrproper``
+  在 ``make clean`` 之外, 再删除 .config、生成的配置头文件与编译出的
+  配置工具.
 
 ``make size`` 的输出示例 (avr-gcc 9.5.0)::
 
