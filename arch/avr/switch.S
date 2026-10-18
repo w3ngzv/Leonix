@@ -66,11 +66,13 @@ __vector_17:
 	restore_context
 	reti
 
+#ifdef CONFIG_I2C
 	/*
 	 * TWI interrupt.  twi_interrupt() returns non-zero when it has woken
 	 * a task; switching right away lets the I2C caller run on before
 	 * the next tick instead of up to 1 ms later.  The frame is the
 	 * tick's, so either path can resume a task the other saved.
+	 * Without CONFIG_I2C the weak default in start.S stays in place.
 	 */
 	.global	__vector_36
 __vector_36:
@@ -83,6 +85,7 @@ __vector_36:
 1:	load_sp
 	restore_context
 	reti
+#endif
 
 	/*
 	 * USB general and endpoint interrupts, the same way as TWI.  The
