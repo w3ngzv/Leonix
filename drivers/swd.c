@@ -100,8 +100,20 @@ static const struct swd_word swd_words[] PROGMEM = {
 
 #define NR_SWD_WORDS	(sizeof(swd_words) / sizeof(swd_words[0]))
 
+/*
+ * The line after swd_words[] decodes the ROM table's PIDR into the
+ * designer's JEP106 continuation and identity codes and the part number,
+ * fields as in CoreSight IHI 0029F B2.2: DES_0 PIDR1[7:4], DES_1
+ * PIDR2[2:0], DES_2 PIDR4[3:0], PART PIDR1[3:0]:PIDR0.  JEP106AB lists
+ * 0x20 in bank one, continuation 0, as SGS/Thomson, now ST.
+ */
+#define ROM_PIDR0	0xe00fffe0UL
+#define ROM_PIDR4	0xe00fffd0UL
+#define PIDR_JEDEC	0x08
+
 static uint8_t link;		/* ACK_OK once the AHB-AP is usable */
 static char line[24];
+static uint8_t rom_pidr[5];	/* PIDR0 to PIDR3, then PIDR4 */
 
 static void write_bits(uint32_t v, uint8_t n)
 {
@@ -271,9 +283,35 @@ static const char *status_text(uint8_t s)
 	}
 }
 
+static uint8_t __attribute__((noinline)) jep106_line(void)
+{
+	uint32_t v = 0;
+	uint8_t i, st = link;
+
+	DDRB |= 1 << SWCLK;
+	swdio_drive();
+	for (i = 0; st == ACK_OK && i < sizeof(rom_pidr); i++) {
+		st = mem_read(i < 4 ? ROM_PIDR0 + 4 * i : ROM_PIDR4, &v);
+		rom_pidr[i] = v;
+	}
+	swdio_release();
+	DDRB &= ~(1 << SWCLK);
+
+	if (st != ACK_OK)
+		return snprintk(line, sizeof(line), "JEP106 %S\n",
+				status_text(st));
+	if (!(rom_pidr[2] & PIDR_JEDEC))
+		return snprintk(line, sizeof(line), "JEP106 none\n");
+	return snprintk(line, sizeof(line), "JEP106 %u %02x part %03x\n",
+			rom_pidr[4] & 0x0f,
+			(rom_pidr[2] & 0x07) << 4 | rom_pidr[1] >> 4,
+			(rom_pidr[1] & 0x0f) << 8 | rom_pidr[0]);
+}
+
 /*
- * Line @n into line[]: DPIDR for line 0, which also connects, then one
- * line per swd_words[] entry.  The pins are driven only inside a call.
+ * Line @n into line[]: DPIDR for line 0, which also connects, one line
+ * per swd_words[] entry, then the decoded JEP106 line.  The pins are
+ * driven only inside a call.
  */
 static uint8_t __attribute__((noinline)) swd_line(uint8_t n)
 {
@@ -281,8 +319,10 @@ static uint8_t __attribute__((noinline)) swd_line(uint8_t n)
 	uint32_t v = 0;
 	uint8_t st;
 
-	if (n > NR_SWD_WORDS)
+	if (n > NR_SWD_WORDS + 1)
 		return 0;
+	if (n == NR_SWD_WORDS + 1)
+		return jep106_line();
 	DDRB |= 1 << SWCLK;
 	swdio_drive();
 	if (n == 0) {
@@ -353,10 +393,14 @@ static const struct file_operations swd_fops = {
  *   g PC     run from PC: Thumb state, SP at the top of 20 KiB of SRAM,
  *            PRIMASK set
  *   x        reset the target
+ *   p        power the debug port down: clear CDBGPWRUPREQ and
+ *            CSYSPWRUPREQ and wait for both ACKs to fall
  *   f        time FREQ_PERIODS rising edges on D13 (PC7, ICP3)
  *
  * A read prints "ADDR VALUE" lines, after f the line "F SUM", SUM being
- * the Timer3 counts at F_CPU over FREQ_PERIODS periods.  The first failed
+ * the Timer3 counts at F_CPU over FREQ_PERIODS periods, after p the line
+ * "P CTRL/STAT" with the last value read.  Only DP registers are reached
+ * while the port is down; c powers it up again.  The first failed
  * command since the last read makes the next read print "err N" alone,
  * N an ACK or ERR_* code, so a script can check once after many writes.
  */
@@ -383,8 +427,8 @@ static const struct file_operations swd_fops = {
 
 static char cmd[16];
 static uint8_t cmd_len;
-static uint32_t dap_addr, freq_sum;
-static uint8_t dap_count, dap_freq;
+static uint32_t dap_addr, freq_sum, ctrl_stat;
+static uint8_t dap_count, dap_freq, dap_power;
 static uint8_t dap_err = ACK_OK;
 
 static uint8_t mem_write(uint32_t addr, uint32_t v)
@@ -460,6 +504,19 @@ static uint8_t measure_freq(void)
 	return edges > FREQ_PERIODS ? ACK_OK : ERR_NOSIGNAL;
 }
 
+static uint8_t power_down(void)
+{
+	uint8_t i, ack;
+
+	ack = dp_write(DP_CTRL_STAT, 0);
+	for (i = 0; ack == ACK_OK && i < PWRUP_TRIES; i++) {
+		ack = transfer(DP, READ, DP_CTRL_STAT, &ctrl_stat);
+		if (!(ctrl_stat & PWRUP_ACK))
+			return ack;
+	}
+	return ack == ACK_OK ? ERR_POWER : ack;
+}
+
 /* @s points after the command letter; returns 0 if no hex number follows. */
 static uint8_t parse_hex(const char *s, uint32_t *v)
 {
@@ -490,6 +547,7 @@ static uint8_t __attribute__((noinline)) dap_command(void)
 	if (strchr_P(PSTR("awng"), cmd[0]) && !parse_hex(cmd + 1, &v))
 		return ERR_SYNTAX;
 	dap_freq = 0;
+	dap_power = 0;
 	switch (cmd[0]) {
 	case 'a':
 		dap_addr = v;
@@ -519,6 +577,10 @@ static uint8_t __attribute__((noinline)) dap_command(void)
 		break;
 	case 'g':
 		ack = run_from(v);
+		break;
+	case 'p':
+		dap_power = 1;
+		ack = power_down();
 		break;
 	case 'x':
 		mem_write(DHCSR, DHCSR_OFF);
@@ -568,6 +630,9 @@ static uint8_t __attribute__((noinline)) dap_line(uint8_t n)
 	}
 	if (dap_freq)
 		return n ? 0 : snprintk(line, sizeof(line), "F %lu\n", freq_sum);
+	if (dap_power)
+		return n ? 0 : snprintk(line, sizeof(line), "P %08lx\n",
+					ctrl_stat);
 	if (n >= dap_count)
 		return 0;
 	addr = dap_addr + 4 * (uint32_t)n;
