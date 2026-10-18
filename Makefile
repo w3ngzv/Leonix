@@ -9,14 +9,18 @@ APP_FLASH_SIZE := 28672
 # The baud rate that sends a running Leonix to the bootloader.
 BOOTLOADER_BAUD := 1200
 
-OBJS := arch/avr/start.o arch/avr/switch.o arch/avr/time.o arch/avr/i2c.o \
-	arch/avr/usb.o arch/avr/panic.o kernel/sched.o kernel/printk.o \
-	fs/char_dev.o fs/vfs.o fs/lxfs.o fs/romfs.o fs/romfs_image.o \
-	fs/procfs.o kernel/vm.o kernel/exec.o drivers/tty.o \
-	drivers/eeprom.o drivers/lcd.o drivers/swd.o lib/vsprintf.o \
-	init/init.o \
-	init/main.o
+# Each directory lists its objects in its own Makefile as Linux's obj-y,
+# read here in place of Kbuild's descent into the directory.
+kbuild-dirs := arch/avr kernel fs drivers lib init
 
+define kbuild-dir
+obj-y :=
+include $(1)/Makefile
+OBJS += $$(addprefix $(1)/,$$(obj-y))
+endef
+
+OBJS :=
+$(foreach d,$(kbuild-dirs),$(eval $(call kbuild-dir,$(d))))
 
 CC      := avr-gcc
 OBJCOPY := avr-objcopy
