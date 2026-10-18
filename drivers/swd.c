@@ -393,10 +393,14 @@ static const struct file_operations swd_fops = {
  *   g PC     run from PC: Thumb state, SP at the top of 20 KiB of SRAM,
  *            PRIMASK set
  *   x        reset the target
+ *   p        power the debug port down: clear CDBGPWRUPREQ and
+ *            CSYSPWRUPREQ and wait for both ACKs to fall
  *   f        time FREQ_PERIODS rising edges on D13 (PC7, ICP3)
  *
  * A read prints "ADDR VALUE" lines, after f the line "F SUM", SUM being
- * the Timer3 counts at F_CPU over FREQ_PERIODS periods.  The first failed
+ * the Timer3 counts at F_CPU over FREQ_PERIODS periods, after p the line
+ * "P CTRL/STAT" with the last value read.  Only DP registers are reached
+ * while the port is down; c powers it up again.  The first failed
  * command since the last read makes the next read print "err N" alone,
  * N an ACK or ERR_* code, so a script can check once after many writes.
  */
@@ -423,8 +427,8 @@ static const struct file_operations swd_fops = {
 
 static char cmd[16];
 static uint8_t cmd_len;
-static uint32_t dap_addr, freq_sum;
-static uint8_t dap_count, dap_freq;
+static uint32_t dap_addr, freq_sum, ctrl_stat;
+static uint8_t dap_count, dap_freq, dap_power;
 static uint8_t dap_err = ACK_OK;
 
 static uint8_t mem_write(uint32_t addr, uint32_t v)
@@ -500,6 +504,19 @@ static uint8_t measure_freq(void)
 	return edges > FREQ_PERIODS ? ACK_OK : ERR_NOSIGNAL;
 }
 
+static uint8_t power_down(void)
+{
+	uint8_t i, ack;
+
+	ack = dp_write(DP_CTRL_STAT, 0);
+	for (i = 0; ack == ACK_OK && i < PWRUP_TRIES; i++) {
+		ack = transfer(DP, READ, DP_CTRL_STAT, &ctrl_stat);
+		if (!(ctrl_stat & PWRUP_ACK))
+			return ack;
+	}
+	return ack == ACK_OK ? ERR_POWER : ack;
+}
+
 /* @s points after the command letter; returns 0 if no hex number follows. */
 static uint8_t parse_hex(const char *s, uint32_t *v)
 {
@@ -530,6 +547,7 @@ static uint8_t __attribute__((noinline)) dap_command(void)
 	if (strchr_P(PSTR("awng"), cmd[0]) && !parse_hex(cmd + 1, &v))
 		return ERR_SYNTAX;
 	dap_freq = 0;
+	dap_power = 0;
 	switch (cmd[0]) {
 	case 'a':
 		dap_addr = v;
@@ -559,6 +577,10 @@ static uint8_t __attribute__((noinline)) dap_command(void)
 		break;
 	case 'g':
 		ack = run_from(v);
+		break;
+	case 'p':
+		dap_power = 1;
+		ack = power_down();
 		break;
 	case 'x':
 		mem_write(DHCSR, DHCSR_OFF);
@@ -608,6 +630,9 @@ static uint8_t __attribute__((noinline)) dap_line(uint8_t n)
 	}
 	if (dap_freq)
 		return n ? 0 : snprintk(line, sizeof(line), "F %lu\n", freq_sum);
+	if (dap_power)
+		return n ? 0 : snprintk(line, sizeof(line), "P %08lx\n",
+					ctrl_stat);
 	if (n >= dap_count)
 		return 0;
 	addr = dap_addr + 4 * (uint32_t)n;
