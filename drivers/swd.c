@@ -100,8 +100,20 @@ static const struct swd_word swd_words[] PROGMEM = {
 
 #define NR_SWD_WORDS	(sizeof(swd_words) / sizeof(swd_words[0]))
 
+/*
+ * The line after swd_words[] decodes the ROM table's PIDR into the
+ * designer's JEP106 continuation and identity codes and the part number,
+ * fields as in CoreSight IHI 0029F B2.2: DES_0 PIDR1[7:4], DES_1
+ * PIDR2[2:0], DES_2 PIDR4[3:0], PART PIDR1[3:0]:PIDR0.  JEP106AB lists
+ * 0x20 in bank one, continuation 0, as SGS/Thomson, now ST.
+ */
+#define ROM_PIDR0	0xe00fffe0UL
+#define ROM_PIDR4	0xe00fffd0UL
+#define PIDR_JEDEC	0x08
+
 static uint8_t link;		/* ACK_OK once the AHB-AP is usable */
 static char line[24];
+static uint8_t rom_pidr[5];	/* PIDR0 to PIDR3, then PIDR4 */
 
 static void write_bits(uint32_t v, uint8_t n)
 {
@@ -271,9 +283,35 @@ static const char *status_text(uint8_t s)
 	}
 }
 
+static uint8_t __attribute__((noinline)) jep106_line(void)
+{
+	uint32_t v = 0;
+	uint8_t i, st = link;
+
+	DDRB |= 1 << SWCLK;
+	swdio_drive();
+	for (i = 0; st == ACK_OK && i < sizeof(rom_pidr); i++) {
+		st = mem_read(i < 4 ? ROM_PIDR0 + 4 * i : ROM_PIDR4, &v);
+		rom_pidr[i] = v;
+	}
+	swdio_release();
+	DDRB &= ~(1 << SWCLK);
+
+	if (st != ACK_OK)
+		return snprintk(line, sizeof(line), "JEP106 %S\n",
+				status_text(st));
+	if (!(rom_pidr[2] & PIDR_JEDEC))
+		return snprintk(line, sizeof(line), "JEP106 none\n");
+	return snprintk(line, sizeof(line), "JEP106 %u %02x part %03x\n",
+			rom_pidr[4] & 0x0f,
+			(rom_pidr[2] & 0x07) << 4 | rom_pidr[1] >> 4,
+			(rom_pidr[1] & 0x0f) << 8 | rom_pidr[0]);
+}
+
 /*
- * Line @n into line[]: DPIDR for line 0, which also connects, then one
- * line per swd_words[] entry.  The pins are driven only inside a call.
+ * Line @n into line[]: DPIDR for line 0, which also connects, one line
+ * per swd_words[] entry, then the decoded JEP106 line.  The pins are
+ * driven only inside a call.
  */
 static uint8_t __attribute__((noinline)) swd_line(uint8_t n)
 {
@@ -281,8 +319,10 @@ static uint8_t __attribute__((noinline)) swd_line(uint8_t n)
 	uint32_t v = 0;
 	uint8_t st;
 
-	if (n > NR_SWD_WORDS)
+	if (n > NR_SWD_WORDS + 1)
 		return 0;
+	if (n == NR_SWD_WORDS + 1)
+		return jep106_line();
 	DDRB |= 1 << SWCLK;
 	swdio_drive();
 	if (n == 0) {
