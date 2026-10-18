@@ -32,7 +32,7 @@
 
 #include <leonix/fs.h>
 #include <leonix/kernel.h>
-#include <leonix/swd.h>
+#include <leonix/module.h>
 
 #define SWCLK		PB4
 #define SWDIO		PB5
@@ -591,12 +591,13 @@ static const struct file_operations dap_fops = {
 	.write = dap_write,
 };
 
-int swd_init(void)
+static int swd_init(void)
 {
 	int err;
 
 	err = register_chrdev(PSTR("swd"), &swd_fops);
-	if (!err)
+	if (!err && IS_ENABLED(CONFIG_SWD_DAP))
 		err = register_chrdev(PSTR("dap"), &dap_fops);
 	return err;
 }
+module_init(swd_init);

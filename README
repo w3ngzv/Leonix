@@ -39,8 +39,12 @@ them, then follows new ones and gives the shell prompt:
 All of this runs on the board.  With the LCD refreshed once a second
 the display reads 99% idle.
 
+	make leonardo_defconfig
 	make
 	make flash PORT=/dev/cu.usbmodemXXXX
+
+make menuconfig chooses the drivers, as in Linux; see
+Documentation/building.rst.
 
 With Leonix running, make flash restarts the board into the bootloader
 itself.  An older image needs the reset button pressed first.
