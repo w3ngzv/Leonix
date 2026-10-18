@@ -39,7 +39,8 @@ TASK_STACKS_START := 0x800802
 SRAM_END          := 0x800b00
 BOOT_STACK_MIN    := 128
 
-LDFLAGS  := -mmcu=$(MCU) -nostartfiles \
+LDSCRIPT := arch/avr/leonix.lds
+LDFLAGS  := -mmcu=$(MCU) -nostartfiles -T $(LDSCRIPT) \
 	    -Wl,--defsym=__TEXT_REGION_LENGTH__=$(APP_FLASH_SIZE) \
 	    -Wl,--section-start=.noinit=$(TASK_STACKS_START) \
 	    -Wl,-Map=$(TARGET).map
@@ -52,8 +53,8 @@ all: $(TARGET).hex
 %.o: %.S
 	$(CC) $(CPPFLAGS) $(ASFLAGS) -MMD -MP -c -o $@ $<
 
-$(TARGET).elf: $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $^
+$(TARGET).elf: $(OBJS) $(LDSCRIPT)
+	$(CC) $(LDFLAGS) -o $@ $(OBJS)
 	@bss_end=$$($(NM) $@ | awk '$$3 == "__bss_end" { print $$1 }'); \
 	set -- $$($(OBJDUMP) -h $@ | awk '$$2 == ".noinit" { print $$3, $$4 }'); \
 	noinit_end=$$((0x$$1 + 0x$$2)); \
