@@ -8,6 +8,7 @@
 #include <leonix/lcd.h>
 #include <leonix/printk.h>
 #include <leonix/sched.h>
+#include <leonix/swd.h>
 #include <leonix/init.h>
 #include <leonix/usb.h>
 
@@ -202,6 +203,8 @@ int main(void)
 	if (eeprom_fs_init())
 		printk("mkfs lxfs");
 	leds_off();
+	if (swd_init() < 0)
+		printk("no /dev/swd");
 	task_create(lcd_task, lcd_stack, sizeof(lcd_stack));
 	if (usb_init() < 0)
 		printk("usb init failed");
