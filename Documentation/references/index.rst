@@ -97,6 +97,108 @@ USB-CDC-1.2.pdf, USB-CDC-PSTN-1.2.pdf
 
   https://www.usb.org/sites/default/files/CDC1.2_WMC1.1_012011.zip
 
+STM32F103 与 SWD
+----------------
+
+drivers/swd.c 经 SWD 读取 STM32F103 的标识寄存器, 用于鉴定一块印字为
+STM32F103C8T6 的核心板 (2026-10-18). 下列文献是该驱动的寄存器地址与鉴定
+结论的依据. ST 的文档均声明 All rights reserved. 前三份的副本取自
+MediaWiki 仓库的 sources/pdf/, SHA-256 与该仓库的 CHECKSUMS.md 一致.
+
+STM32F103x8B-datasheet-DS5319-rev20.pdf
+  STMicroelectronics, STM32F103x8, STM32F103xB 数据手册, DS5319 Rev 20,
+  2025 年 7 月. 订货代码 (第 7 节, C8 为 64 KB) 与引脚表 (PA9、PA10、
+  PA13、PA14 标为 FT) 的依据. 取自 farnell.com, 未与 st.com 的同号文件
+  逐字节比对. SHA-256
+  1e54ce18e6c34c5b4a78986f26e245e143748c721009fc9af5953795c30686bc.
+
+  https://www.farnell.com/datasheets/4595259.pdf
+
+STM32F10xxx-RM0008-rev15.pdf
+  STMicroelectronics, RM0008 参考手册, DocID13902 Rev 15, 2014 年 6 月.
+  Flash 容量寄存器 (30.1.1)、唯一 ID (30.2)、DBGMCU_IDCODE (31.6.1)、
+  ROM 表中的 JEDEC-106 代码 (31.6.4) 与 SW-DP 的 ID 0x1BA01477 (31.8.3)
+  的依据. 现行版为 Rev 21, 未取得. SHA-256
+  12f0c3de375b6c32dfc6aec0f46e61a0ec9393e66ae32c45d9d856ec83dd223e.
+
+  https://www.espruino.com/datasheets/STM32F103xC_ref.pdf
+
+STM32-Cortex-M3-PM0056-rev5.pdf
+  STMicroelectronics, PM0056 Cortex-M3 编程手册, DocID15491 Rev 5, 2013 年
+  5 月. CPUID 的字段与 STM32F1 的复位值 0x411FC231 的依据. SHA-256
+  3917d2c2244da04ca71eaceaaabf6494068bb8f054c8c69dc05e1e9ea892d3f2.
+
+  https://www.eng.auburn.edu/~nelson/courses/elec3040_3050/ARM_Keil%20Documents/Cortex-M3_ProgManual.pdf
+
+STM32F10xx8B-errata-ES096-rev15.pdf
+  STMicroelectronics, ES096 STM32F101x8/B, STM32F102x8/B and
+  STM32F103x8/B medium-density device errata, Rev 15, 2022 年 3 月. 表 2
+  给出 REV_ID 与芯片版本的对应, 2.2.2 节称 DBGMCU_IDCODE 在用户模式下
+  读出 0x00, 表 3 中该项对全部版本标为 N. st.com 对脚本请求无响应,
+  2026-10-18 取自 Internet Archive 2026-08-25 的快照. SHA-256
+  7bcdf58d8b602292d68abb59e181a4f44a038f215d8b01b0167f6d7139285490.
+
+  https://www.st.com/resource/en/errata_sheet/cd00190234-stm32f101x8-b-stm32f102x8-b-and-stm32f103x8-b-medium-density-device-limitations-stmicroelectronics.pdf
+
+下列网页与源码文件于 2026-10-18 保存, 用于判断芯片真伪. 网页属二手资料,
+其中的结论在可行处已对照上面的 ST 文档复核.
+
+Bluepill-Diagnostics-v1.640.html
+  Terry Porter, Bluepill Diagnostics V1.6 User Guide, 页面注明 2026-09-13
+  更新. 四项原厂判据, 其中包括 Flash 容量寄存器为 64 KB 与厂商代码为
+  STMicroelectronics. SHA-256
+  a79175eaba2ba1e53868b3dfb3c97fd165d7b6e6209f54a8a6e4b4446bdb02fb.
+
+  https://mecrisp-stellaris-folkdoc.sourceforge.io/bluepill-diags-v1.640.html
+
+eevblog-2020-stm32f1-dbgmcu-idcode.html
+  EEVblog 论坛帖, STM32F1xx reading 0xE0042000, the 'MCU device ID code',
+  2020 年 2 月. 引述 ES096 2.2.2 节, 并记录原厂 STM32F103C8 的用户程序
+  在未连接调试器时读出 0. SHA-256
+  b6744146694647839c2df6c3d51fe5b78f13712eb6fd6f8479f36121bbcdde39.
+
+  https://www.eevblog.com/forum/microcontrollers/stm32f1xx-reading-0xe0042000-the-mcu-device-id-code/msg2899594/
+
+CNX-2020-how-to-detect-stm32-fakes.html
+  CNX Software, How to Detect STM32 Fakes, 2020-03-22. 转引 ST 对丝印
+  991KA 93 / MYS 807 为假片的答复, 原始出处是下一项. SHA-256
+  eb297d93f80af28e5184c633f1e28be9b7c43017ce1741e791817ee6c0a80e51.
+
+  https://www.cnx-software.com/2020/03/22/how-to-detect-stm32-fakes/
+
+Greaseweazle-wiki-STM32-Fakes.html
+  keirf/greaseweazle 仓库的 wiki 页 STM32 Fakes. SHA-256
+  cd154c4e406cdbaabde18b12e12a84857bf0c0aca96219dee4a67658d58349e4.
+
+  https://github.com/keirf/greaseweazle/wiki/STM32-Fakes
+
+ST-community-f103c8-128kb-flash.html
+  ST 社区帖, STM32F103C8T6 with 128kb of flash instead of 64? Fake or
+  genuine?. SHA-256
+  da3e421ebedcf14a78710f748292394016c78f3e20612955339c0119c30c749c.
+
+  https://community.st.com/stm32-mcus-products-25/stm32f103c8t6-with-128kb-of-flash-instead-of-64-fake-or-genuine-51319
+
+deividAlfa-stm32-programming.md
+  deividAlfa/stm32_soldering_iron_controller 仓库的
+  Readme_files/Programming.md, 读取时 master 位于 b13cdf4b90f0. 列出原厂
+  STM32F101/102/103 Cx/Rx 可能出现的 DBGMCU_IDCODE 与 Flash 容量寄存器
+  取值. SHA-256
+  9104d5b7372222eea3cda9b4a3a6e473ac7f521a8ea7b05726b3b9a19ab1475e.
+
+  https://github.com/deividAlfa/stm32_soldering_iron_controller/blob/master/Readme_files/Programming.md
+
+OpenOCD-jep106.inc, OpenOCD-arm_coresight.h
+  OpenOCD 源码 src/helper/jep106.inc 与 src/target/arm_coresight.h, 读取
+  时 master 位于 bb5a52da599c. 前者把 JEP106 代码映射到厂商名 (第 0 组
+  0x20 为 STMicroelectronics), 后者给出由 PIDR 求零件号与设计厂商的位域.
+  按 GPL-2.0-or-later 发布, 可以再分发, 为与本节其余文件一致仍不纳入
+  仓库. SHA-256 分别为
+  92386f15139654b67e7756dcadd25881264bb7d8e8ea88386b96095855f5db5f 与
+  c99cdcfda2dbb34096ddd023f852484e48cf1dfcf136efacbd49cbfba004e36c.
+
+  https://github.com/openocd-org/openocd/tree/master/src
+
 架构的历史资料
 --------------
 
