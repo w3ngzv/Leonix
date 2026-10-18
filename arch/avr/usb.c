@@ -108,7 +108,7 @@
 #define DESC_ENDPOINT		5
 #define DESC_CS_INTERFACE	0x24	/* CDC 1.2 table 12 */
 
-#define USB_CONFIG_VALUE	1
+#define USB_CONF_VALUE	1
 #define USB_MAX_POWER_MA	100
 #define EP_IN			0x80
 #define EP_BULK			2
@@ -181,11 +181,11 @@ static const uint8_t device_desc[] PROGMEM = {
 	1,
 };
 
-#define CONFIG_DESC_LEN	67
+#define CONF_DESC_LEN	67
 
-static const uint8_t config_desc[CONFIG_DESC_LEN] PROGMEM = {
-	9, DESC_CONFIGURATION, lo(CONFIG_DESC_LEN), hi(CONFIG_DESC_LEN),
-	2, USB_CONFIG_VALUE, 0, 0x80, USB_MAX_POWER_MA / 2,
+static const uint8_t config_desc[CONF_DESC_LEN] PROGMEM = {
+	9, DESC_CONFIGURATION, lo(CONF_DESC_LEN), hi(CONF_DESC_LEN),
+	2, USB_CONF_VALUE, 0, 0x80, USB_MAX_POWER_MA / 2,
 
 	/* Interface 0, communication class, abstract control model */
 	9, DESC_INTERFACE, 0, 0, 1, 0x02, 0x02, 0x01, 0,
@@ -389,7 +389,7 @@ static void standard_request(const struct setup_packet *setup)
 		ep0_send(&usb_config, 1, setup->length, 0);
 		break;
 	case REQ_SET_CONFIGURATION:
-		if (lo(setup->value) > USB_CONFIG_VALUE) {
+		if (lo(setup->value) > USB_CONF_VALUE) {
 			ep0_stall();
 			break;
 		}
