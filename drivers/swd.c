@@ -311,11 +311,12 @@ static uint8_t __attribute__((noinline)) swd_line(uint8_t n)
  * A line is made once, when its first byte is read, since making it
  * talks to the target.
  */
-static int swd_read(struct file *f, char *buf, uint8_t count)
+static int line_read(struct file *f, char *buf, uint8_t count,
+		     uint8_t (*make)(uint8_t))
 {
 	uint8_t len, n;
 
-	len = f->f_pos ? strlen(line) : swd_line(f->private_data);
+	len = f->f_pos ? strlen(line) : make(f->private_data);
 	if (!len)
 		return 0;
 	n = len - f->f_pos;
@@ -330,11 +331,272 @@ static int swd_read(struct file *f, char *buf, uint8_t count)
 	return n;
 }
 
+static int swd_read(struct file *f, char *buf, uint8_t count)
+{
+	return line_read(f, buf, count, swd_line);
+}
+
 static const struct file_operations swd_fops = {
 	.read = swd_read,
 };
 
+/*
+ * /dev/dap: memory access and run control on the target for a script on
+ * the host.  The shell's echo is the only writer, so each written line
+ * is one command, numbers in hex:
+ *
+ *   c        connect and power up the debug port
+ *   a ADDR   the word address that w and reads start from
+ *   w VALUE  write a word there and step to the next word
+ *   n COUNT  how many words a read prints
+ *   h        halt the core
+ *   g PC     run from PC: Thumb state, SP at the top of 20 KiB of SRAM,
+ *            PRIMASK set
+ *   x        reset the target
+ *   f        time FREQ_PERIODS rising edges on D13 (PC7, ICP3)
+ *
+ * A read prints "ADDR VALUE" lines, after f the line "F SUM", SUM being
+ * the Timer3 counts at F_CPU over FREQ_PERIODS periods.  The first failed
+ * command since the last read makes the next read print "err N" alone,
+ * N an ACK or ERR_* code, so a script can check once after many writes.
+ */
+#define DHCSR		0xe000edf0UL
+#define DCRSR		0xe000edf4UL
+#define DCRDR		0xe000edf8UL
+#define AIRCR		0xe000ed0cUL
+#define DHCSR_HALT	0xa05f0003UL	/* DBGKEY | C_HALT | C_DEBUGEN */
+#define DHCSR_RUN	0xa05f0001UL	/* DBGKEY | C_DEBUGEN */
+#define DHCSR_OFF	0xa05f0000UL
+#define AIRCR_RESET	0x05fa0004UL	/* VECTKEY | SYSRESETREQ */
+#define DCRSR_WRITE	0x00010000UL
+#define REG_SP		13
+#define REG_PC		15
+#define REG_XPSR	16
+#define REG_PRIMASK	20		/* with BASEPRI, FAULTMASK, CONTROL */
+#define XPSR_THUMB	0x01000000UL
+#define TARGET_SP	0x20005000UL
+
+#define ERR_SYNTAX	10
+#define ERR_NOSIGNAL	11
+#define FREQ_PERIODS	64
+#define FREQ_TIMEOUT	25		/* Timer3 overflows, 4.1 ms each */
+
+static char cmd[16];
+static uint8_t cmd_len;
+static uint32_t dap_addr, freq_sum;
+static uint8_t dap_count, dap_freq;
+static uint8_t dap_err = ACK_OK;
+
+static uint8_t mem_write(uint32_t addr, uint32_t v)
+{
+	uint8_t ack;
+
+	ack = transfer(AP, WRITE, AP_TAR, &addr);
+	if (ack == ACK_OK)
+		ack = transfer(AP, WRITE, AP_DRW, &v);
+	return ack;
+}
+
+static uint8_t core_reg_write(uint8_t reg, uint32_t v)
+{
+	uint8_t ack;
+
+	ack = mem_write(DCRDR, v);
+	if (ack == ACK_OK)
+		ack = mem_write(DCRSR, DCRSR_WRITE | reg);
+	return ack;
+}
+
+static uint8_t run_from(uint32_t pc)
+{
+	uint8_t ack;
+
+	ack = mem_write(DHCSR, DHCSR_HALT);
+	if (ack == ACK_OK)
+		ack = core_reg_write(REG_PC, pc);
+	if (ack == ACK_OK)
+		ack = core_reg_write(REG_XPSR, XPSR_THUMB);
+	if (ack == ACK_OK)
+		ack = core_reg_write(REG_SP, TARGET_SP);
+	if (ack == ACK_OK)
+		ack = core_reg_write(REG_PRIMASK, 1);
+	if (ack == ACK_OK)
+		ack = mem_write(DHCSR, DHCSR_RUN);
+	return ack;
+}
+
+/*
+ * Sums FREQ_PERIODS periods of the signal on ICP3, Timer3 running at
+ * F_CPU.  A period must be under 65536 counts, about 4 ms.  PC7 also
+ * drives the L LED buffer and goes back to an output afterwards.
+ */
+static uint8_t measure_freq(void)
+{
+	uint16_t last = 0, now;
+	uint8_t edges = 0, idle = 0;
+
+	DDRC &= ~(1 << DDC7);
+	TCCR3A = 0;
+	TCCR3B = (1 << ICNC3) | (1 << ICES3) | (1 << CS30);
+	TIFR3 = (1 << ICF3) | (1 << TOV3);
+	freq_sum = 0;
+	while (edges <= FREQ_PERIODS && idle < FREQ_TIMEOUT) {
+		if (TIFR3 & (1 << TOV3)) {
+			TIFR3 = 1 << TOV3;
+			idle++;
+		}
+		if (!(TIFR3 & (1 << ICF3)))
+			continue;
+		now = ICR3;
+		TIFR3 = 1 << ICF3;
+		if (edges)
+			freq_sum += (uint16_t)(now - last);
+		last = now;
+		edges++;
+		idle = 0;
+	}
+	TCCR3B = 0;
+	DDRC |= 1 << DDC7;
+	return edges > FREQ_PERIODS ? ACK_OK : ERR_NOSIGNAL;
+}
+
+/* @s points after the command letter; returns 0 if no hex number follows. */
+static uint8_t parse_hex(const char *s, uint32_t *v)
+{
+	uint8_t digits = 0;
+	char c;
+
+	while (*s == ' ')
+		s++;
+	*v = 0;
+	while ((c = *s++)) {
+		if (c >= '0' && c <= '9')
+			c -= '0';
+		else if (c >= 'a' && c <= 'f')
+			c -= 'a' - 10;
+		else
+			return 0;
+		*v = *v << 4 | c;
+		digits++;
+	}
+	return digits;
+}
+
+static uint8_t __attribute__((noinline)) dap_command(void)
+{
+	uint32_t v = 0, dpidr;
+	uint8_t ack = ACK_OK;
+
+	if (strchr_P(PSTR("awng"), cmd[0]) && !parse_hex(cmd + 1, &v))
+		return ERR_SYNTAX;
+	dap_freq = 0;
+	switch (cmd[0]) {
+	case 'a':
+		dap_addr = v;
+		return ACK_OK;
+	case 'n':
+		dap_count = v;
+		return ACK_OK;
+	case 'f':
+		dap_freq = 1;
+		return measure_freq();
+	}
+
+	DDRB |= 1 << SWCLK;
+	swdio_drive();
+	switch (cmd[0]) {
+	case 'c':
+		ack = connect(&dpidr);
+		if (ack == ACK_OK)
+			ack = link;
+		break;
+	case 'w':
+		ack = mem_write(dap_addr, v);
+		dap_addr += 4;
+		break;
+	case 'h':
+		ack = mem_write(DHCSR, DHCSR_HALT);
+		break;
+	case 'g':
+		ack = run_from(v);
+		break;
+	case 'x':
+		mem_write(DHCSR, DHCSR_OFF);
+		mem_write(AIRCR, AIRCR_RESET);	/* the reset takes no ACK */
+		break;
+	default:
+		ack = ERR_SYNTAX;
+	}
+	swdio_release();
+	DDRB &= ~(1 << SWCLK);
+	return ack;
+}
+
+static int dap_write(struct file *f, const char *buf, uint8_t count)
+{
+	uint8_t i, st;
+
+	(void)f;
+	for (i = 0; i < count; i++) {
+		if (buf[i] != '\n') {
+			if (cmd_len < sizeof(cmd) - 1)
+				cmd[cmd_len++] = buf[i];
+			continue;
+		}
+		cmd[cmd_len] = '\0';
+		if (cmd_len) {
+			st = dap_command();
+			if (dap_err == ACK_OK)
+				dap_err = st;
+		}
+		cmd_len = 0;
+	}
+	return count;
+}
+
+static uint8_t __attribute__((noinline)) dap_line(uint8_t n)
+{
+	uint32_t addr, v;
+	uint8_t st;
+
+	if (dap_err != ACK_OK) {
+		if (n) {
+			dap_err = ACK_OK;
+			return 0;
+		}
+		return snprintk(line, sizeof(line), "err %u\n", dap_err);
+	}
+	if (dap_freq)
+		return n ? 0 : snprintk(line, sizeof(line), "F %lu\n", freq_sum);
+	if (n >= dap_count)
+		return 0;
+	addr = dap_addr + 4 * (uint32_t)n;
+	DDRB |= 1 << SWCLK;
+	swdio_drive();
+	st = mem_read(addr, &v);
+	swdio_release();
+	DDRB &= ~(1 << SWCLK);
+	if (st != ACK_OK)
+		return snprintk(line, sizeof(line), "%08lx err %u\n", addr, st);
+	return snprintk(line, sizeof(line), "%08lx %08lx\n", addr, v);
+}
+
+static int dap_read(struct file *f, char *buf, uint8_t count)
+{
+	return line_read(f, buf, count, dap_line);
+}
+
+static const struct file_operations dap_fops = {
+	.read = dap_read,
+	.write = dap_write,
+};
+
 int swd_init(void)
 {
-	return register_chrdev(PSTR("swd"), &swd_fops);
+	int err;
+
+	err = register_chrdev(PSTR("swd"), &swd_fops);
+	if (!err)
+		err = register_chrdev(PSTR("dap"), &dap_fops);
+	return err;
 }
