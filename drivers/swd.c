@@ -2,16 +2,16 @@
 /*
  * A Serial Wire Debug host on two GPIO pins, enough to identify an STM32F1
  * without a debug probe.  Reading /dev/swd connects to the target, powers
- * up its debug port and reads four words, one line each:
+ * up its debug port and prints the SW-DP identification register DPIDR,
+ * then the words in swd_words[], one line each.  Among them:
  *
- *   DPIDR   the SW-DP identification register
  *   IDCODE  DBGMCU_IDCODE at 0xE0042000, RM0008 31.6.1
  *   FLASH   the flash size register at 0x1FFFF7E0, KiB in the low half,
  *           RM0008 30.1.1
  *   CPUID   the Cortex-M3 CPUID register at 0xE000ED00
  *
- * The last three addresses are the STM32F1's; on another chip they read
- * whatever lies there, or fault.
+ * The addresses are the STM32F1's; on another chip they read whatever
+ * lies there, or fault.
  *
  * D8 (PB4) drives SWCLK, D9 (PB5) carries SWDIO, both left as inputs
  * between reads.  The pins swing 5 V into a 3.3 V target: STM32F103 PA13
@@ -71,25 +71,36 @@
 #define JTAG_TO_SWD	0xe79e
 #define RESET_ONES	56		/* a line reset needs at least 50 */
 
-enum { SWD_DPIDR, SWD_IDCODE, SWD_FLASH, SWD_CPUID, NR_SWD_WORDS };
-
-static const uint32_t mem_addrs[] PROGMEM = {
-	[SWD_IDCODE] = 0xe0042000UL,
-	[SWD_FLASH] = 0x1ffff7e0UL,
-	[SWD_CPUID] = 0xe000ed00UL,
+/*
+ * Words read through the AHB-AP, one line each after DPIDR.  ROMPIn are
+ * the peripheral ID registers of the Cortex-M3 ROM table, where RM0008
+ * 31.6.4 places the JEDEC-106 code of the chip's designer.  UIDn is the
+ * 96-bit unique ID (RM0008 30.2), OPTn the option bytes at 0x1FFFF800.
+ */
+struct swd_word {
+	char name[7];
+	uint32_t addr;
 };
 
-static const char dpidr_name[] PROGMEM = "DPIDR ";
-static const char idcode_name[] PROGMEM = "IDCODE";
-static const char flash_name[] PROGMEM = "FLASH ";
-static const char cpuid_name[] PROGMEM = "CPUID ";
-
-static const char *const word_names[NR_SWD_WORDS] PROGMEM = {
-	dpidr_name, idcode_name, flash_name, cpuid_name,
+static const struct swd_word swd_words[] PROGMEM = {
+	{ "IDCODE", 0xe0042000UL },
+	{ "FLASH ", 0x1ffff7e0UL },
+	{ "CPUID ", 0xe000ed00UL },
+	{ "ROMPI4", 0xe00fffd0UL },
+	{ "ROMPI0", 0xe00fffe0UL },
+	{ "ROMPI1", 0xe00fffe4UL },
+	{ "ROMPI2", 0xe00fffe8UL },
+	{ "ROMPI3", 0xe00fffecUL },
+	{ "UID0  ", 0x1ffff7e8UL },
+	{ "UID1  ", 0x1ffff7ecUL },
+	{ "UID2  ", 0x1ffff7f0UL },
+	{ "OPT0  ", 0x1ffff800UL },
+	{ "OPT1  ", 0x1ffff804UL },
 };
 
-static uint32_t words[NR_SWD_WORDS];
-static uint8_t status[NR_SWD_WORDS];	/* ACK_OK, another ACK, or ERR_* */
+#define NR_SWD_WORDS	(sizeof(swd_words) / sizeof(swd_words[0]))
+
+static uint8_t link;		/* ACK_OK once the AHB-AP is usable */
 static char line[24];
 
 static void write_bits(uint32_t v, uint8_t n)
@@ -227,30 +238,21 @@ static uint8_t power_up(void)
 	return ack;
 }
 
-/* Fills words[] and status[]; a failed step marks every word after it. */
-static void __attribute__((noinline)) identify(void)
+/*
+ * Switches the target to SWD and reads DPIDR into @v; sets link to the
+ * outcome of powering up the debug port.
+ */
+static uint8_t connect(uint32_t *v)
 {
-	uint8_t i, ack;
+	uint8_t ack;
 
-	DDRB |= 1 << SWCLK;
-	swdio_drive();
 	line_reset();
 	write_bits(JTAG_TO_SWD, 16);
 	line_reset();
 	write_bits(0, 8);
-
-	ack = transfer(DP, READ, DP_DPIDR, &words[SWD_DPIDR]);
-	status[SWD_DPIDR] = ack;
-	if (ack == ACK_OK)
-		ack = power_up();
-	for (i = SWD_IDCODE; i < NR_SWD_WORDS; i++) {
-		if (ack == ACK_OK)
-			ack = mem_read(pgm_read_dword(&mem_addrs[i]), &words[i]);
-		status[i] = ack;
-	}
-
-	swdio_release();
-	DDRB &= ~(1 << SWCLK);
+	ack = transfer(DP, READ, DP_DPIDR, v);
+	link = ack == ACK_OK ? power_up() : ack;
+	return ack;
 }
 
 static const char *status_text(uint8_t s)
@@ -269,32 +271,51 @@ static const char *status_text(uint8_t s)
 	}
 }
 
+/*
+ * Line @n into line[]: DPIDR for line 0, which also connects, then one
+ * line per swd_words[] entry.  The pins are driven only inside a call.
+ */
 static uint8_t __attribute__((noinline)) swd_line(uint8_t n)
 {
 	const char *name;
+	uint32_t v = 0;
+	uint8_t st;
 
-	if (n >= NR_SWD_WORDS)
+	if (n > NR_SWD_WORDS)
 		return 0;
-	if (n == 0)
-		identify();
-	name = pgm_read_ptr(&word_names[n]);
-	if (status[n] == ACK_OK)
-		return snprintk(line, sizeof(line), "%S %08lx\n", name,
-				words[n]);
-	if (status[n] < ERR_PARITY && status[n] != ACK_WAIT &&
-	    status[n] != ACK_FAULT && status[n] != ACK_NONE)
-		return snprintk(line, sizeof(line), "%S ack %u\n", name,
-				status[n]);
-	return snprintk(line, sizeof(line), "%S %S\n", name,
-			status_text(status[n]));
+	DDRB |= 1 << SWCLK;
+	swdio_drive();
+	if (n == 0) {
+		name = PSTR("DPIDR ");
+		st = connect(&v);
+	} else {
+		name = swd_words[n - 1].name;
+		st = link;
+		if (st == ACK_OK)
+			st = mem_read(pgm_read_dword(&swd_words[n - 1].addr),
+				      &v);
+	}
+	swdio_release();
+	DDRB &= ~(1 << SWCLK);
+
+	if (st == ACK_OK)
+		return snprintk(line, sizeof(line), "%S %08lx\n", name, v);
+	if (st < ERR_PARITY && st != ACK_WAIT && st != ACK_FAULT &&
+	    st != ACK_NONE)
+		return snprintk(line, sizeof(line), "%S ack %u\n", name, st);
+	return snprintk(line, sizeof(line), "%S %S\n", name, status_text(st));
 }
 
-/* private_data is the line number, f_pos the offset in it, as in /proc. */
+/*
+ * private_data is the line number, f_pos the offset in it, as in /proc.
+ * A line is made once, when its first byte is read, since making it
+ * talks to the target.
+ */
 static int swd_read(struct file *f, char *buf, uint8_t count)
 {
 	uint8_t len, n;
 
-	len = swd_line(f->private_data);
+	len = f->f_pos ? strlen(line) : swd_line(f->private_data);
 	if (!len)
 		return 0;
 	n = len - f->f_pos;
