@@ -18,3 +18,8 @@ tests/test_vm
 fs/romfs_image.c
 *.lex.c
 *.tab.[ch]
+.config
+.config.old
+/include/config/
+/include/generated/
+/defconfig

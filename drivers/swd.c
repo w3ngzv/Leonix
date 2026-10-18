@@ -596,7 +596,7 @@ static int swd_init(void)
 	int err;
 
 	err = register_chrdev(PSTR("swd"), &swd_fops);
-	if (!err)
+	if (!err && IS_ENABLED(CONFIG_SWD_DAP))
 		err = register_chrdev(PSTR("dap"), &dap_fops);
 	return err;
 }

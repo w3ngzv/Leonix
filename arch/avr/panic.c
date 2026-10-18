@@ -39,7 +39,7 @@ static void panic_show(uint8_t reason, uint8_t task)
 {
 	char line[LCD_COLS + 1];
 
-	if (lcd_init() < 0)
+	if (!IS_ENABLED(CONFIG_HD44780) || lcd_init() < 0)
 		return;
 	snprintk(line, sizeof(line), "PANIC %S", reason_name(reason));
 	if (lcd_puts(line) < 0)
