@@ -11,7 +11,8 @@
  */
 #include <avr/eeprom.h>
 
-#include <leonix/eeprom.h>
+#include <leonix/module.h>
+#include <leonix/printk.h>
 #include <leonix/lxfs.h>
 
 static void eeprom_dev_read(uint16_t off, void *buf, uint16_t len)
@@ -24,8 +25,11 @@ static void eeprom_dev_write(uint16_t off, const void *buf, uint16_t len)
 	eeprom_update_block(buf, (void *)off, len);
 }
 
-/* Mount lxfs on the EEPROM.  Returns 1 if it had to be formatted. */
-int eeprom_fs_init(void)
+/* Mount lxfs on the EEPROM, formatting it if it holds none. */
+static int eeprom_fs_init(void)
 {
-	return lxfs_init(eeprom_dev_read, eeprom_dev_write);
+	if (lxfs_init(eeprom_dev_read, eeprom_dev_write))
+		printk("mkfs lxfs");
+	return 0;
 }
+fs_initcall(eeprom_fs_init);

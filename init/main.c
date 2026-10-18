@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <avr/io.h>
+#include <avr/pgmspace.h>
 #include <util/atomic.h>
 
-#include <leonix/eeprom.h>
 #include <leonix/jiffies.h>
 #include <leonix/kernel.h>
 #include <leonix/lcd.h>
 #include <leonix/printk.h>
 #include <leonix/sched.h>
-#include <leonix/swd.h>
 #include <leonix/init.h>
 #include <leonix/usb.h>
 
@@ -196,15 +195,33 @@ static void leds_off(void)
 	DDRD |= 1 << DDD5;
 }
 
+extern const initcall_t __initcall_start[], __initcall_end[];
+
+/*
+ * Linux's do_initcalls(), without the per-level loop: the linker script
+ * has already sorted the table by level.  A failure is logged with the
+ * function's word address, to look up in leonix.map.
+ */
+void do_initcalls(void)
+{
+	const initcall_t *call;
+	initcall_t fn;
+	int ret;
+
+	for (call = __initcall_start; call < __initcall_end; call++) {
+		fn = (initcall_t)pgm_read_ptr(call);
+		ret = fn();
+		if (ret < 0)
+			printk("init %x %d", (uint16_t)fn, ret);
+	}
+}
+
 int main(void)
 {
 	time_init();
 	printk("Leonix booted");
-	if (eeprom_fs_init())
-		printk("mkfs lxfs");
 	leds_off();
-	if (swd_init() < 0)
-		printk("no /dev/swd");
+	do_initcalls();
 	task_create(lcd_task, lcd_stack, sizeof(lcd_stack));
 	if (usb_init() < 0)
 		printk("usb init failed");
