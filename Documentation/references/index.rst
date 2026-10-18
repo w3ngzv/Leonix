@@ -140,6 +140,16 @@ STM32F10xx8B-errata-ES096-rev15.pdf
 
   https://www.st.com/resource/en/errata_sheet/cd00190234-stm32f101x8-b-stm32f102x8-b-and-stm32f103x8-b-medium-density-device-limitations-stmicroelectronics.pdf
 
+STM32F10xxx-flash-PM0075-rev2.pdf
+  STMicroelectronics, PM0075 STM32F10xxx Flash memory microcontrollers
+  编程手册, Doc ID 17863 Rev 2, 2012 年 8 月. Flash 控制器 (FPEC) 的
+  KEYR、SR、CR、AR 寄存器与解锁密钥, 以及主 Flash 只能按半字编程的规定.
+  RM0008 关于 Flash 编程的部分指向该文档. st.com 对脚本请求无响应,
+  2026-10-18 取自 Internet Archive, 下载时为 gzip 压缩, 解压后 31 页.
+  SHA-256 2296c5d528f71ddc7502baa907a0d6a7473ad10f1c67e8b07bb046f291dd4a8a.
+
+  https://www.st.com/resource/en/programming_manual/pm0075-stm32f10xxx-flash-memory-microcontrollers-stmicroelectronics.pdf
+
 下列网页与源码文件于 2026-10-18 保存, 用于判断芯片真伪. 网页属二手资料,
 其中的结论在可行处已对照上面的 ST 文档复核.
 
