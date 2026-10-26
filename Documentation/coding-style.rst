@@ -4,10 +4,10 @@
 代码规范
 ==============
 
-Leonix 的 C 与汇编代码遵循 Linux v6.8 的
-Documentation/process/coding-style.rst, 本文只列出在其之上增加的规则. 增加的
-规则多数来自 Leonix 运行的环境: avr-gcc 的 int 为 16 位, 中断与任务共享
-2.5 KiB SRAM, 文件存放在可能随时断电的 EEPROM 上. Linux 的规则在 Linux
+Leonix 的 C 与汇编代码遵循 Linux 126ad898a6e9 (v7.3-16337, 7.4 合并窗口
+期间的主线) 的 Documentation/process/coding-style.rst, 本文只列出在其之上
+增加的规则. 增加的规则多数来自 Leonix 运行的环境: avr-gcc 的 int 为 16 位,
+中断与任务共享 2.5 KiB SRAM, 文件存放在可能随时断电的 EEPROM 上. Linux 的规则在 Linux
 内核中有缺省成立的前提, 这些前提在 ATmega32U4 上并不成立.
 
 规则的写法以工具能够检查为先. 只能由人检查的规则在各节中注明.
@@ -24,7 +24,7 @@ Documentation/process/coding-style.rst, 本文只列出在其之上增加的规�
   make check                         # 主机测试
   make check-qemu                    # 以 avr-gcc 编译 lxfs 测试, 在 QEMU 中运行
 
-提交之前, 上述命令都应无错误. checkstyle.sh 调用 Linux v6.8 的
+提交之前, 上述命令都应无错误. checkstyle.sh 调用同一提交的
 scripts/checkpatch.pl, 选项在 .checkpatch.conf 中. 该文件关闭了六类检查,
 每一类要求的设施 Leonix 都没有: printk() 的日志级别、compiler_attributes.h、
 strscpy() 以及 READ_ONCE(). 其余检查与 Linux 相同, 警告与错误同样需要处理.
@@ -126,6 +126,8 @@ avr-libc 自身的函数不遵循这一约定.
 现状
 ====
 
-2026-10-26 在 feature/checkstyle 上, checkstyle.sh 报告 0 个错误与 16 个
-警告. 警告中 ``ARRAY_SIZE``、``TRAILING_SEMICOLON`` 与 ``AVOID_EXTERNS``
+2026-10-26 在 feature/checkstyle 上, checkstyle.sh 报告 0 个错误与 17 个
+警告. 其中 include/leonix/kconfig.h 的 MACRO_ARG_UNUSED 出自原样复制的
+Linux 宏 ``__take_second_arg``, Linux 自身的 include/linux/kconfig.h 同样被
+报告. 警告中 ``ARRAY_SIZE``、``TRAILING_SEMICOLON`` 与 ``AVOID_EXTERNS``
 等类别可以直接改正, 尚未处理.
