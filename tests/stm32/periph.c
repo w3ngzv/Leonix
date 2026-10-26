@@ -167,9 +167,12 @@
 #define SR_RXNE		(1u << 5)
 #define SR_TC		(1u << 6)
 #define SR_ERRORS	0xfu		/* PE, FE, NE, ORE */
-#define CR1_UE_TE_RE	((1u << 13) | (1u << 3) | (1u << 2))
+#define CR1_UE_TE	((1u << 13) | (1u << 3))
+#define CR1_UE_TE_RE	(CR1_UE_TE | (1u << 2))
 #define CR3_HDSEL	(1u << 3)
 #define BRR_115200	69u		/* 8 MHz / 115200 = 69.4 */
+/* BRR is HCLK cycles per bit; two frames of start, 8 data and stop bits */
+#define IDLE_FRAME_CYCLES (2u * 10u * BRR_115200)
 
 #define WAIT_LONG	2000000u
 /*
@@ -478,8 +481,19 @@ static void check_gpio(void)
  * asks for the pin as open-drain or floating input.  The pin here is
  * push-pull, so this is a check of the echo only.
  *
+ * On the board this was written for, PA2 and PB10 are not driven while
+ * USART2 and USART3 are disabled, so the pin keeps whatever level it had,
+ * and a low level there garbles the first two echoed bytes.  TE alone
+ * sends an idle frame (RM0008 27.3.2) and drives the pin high; HDSEL
+ * set first would release it again (27.3.10).
+ *
  * 半双工: RM0008 27.3.10 在 USART 内部连接 TX 与 RX, 要求该引脚为开漏输出或
  * 浮空输入. 此处引脚为推挽, 因此只检查回显.
+ *
+ * 在编写本程序所用的板子上, USART2 与 USART3 未使能时 PA2 与 PB10 不被驱动,
+ * 引脚保持原有电平, 该电平为低时回显的前两个字节出错. 只置 TE 会发送一个
+ * 空闲帧 (RM0008 27.3.2), 把引脚驱动为高电平; 先置 HDSEL 则引脚又被释放
+ * (27.3.10).
  */
 static void usart_echo(uint32_t idx, uint32_t base)
 {
@@ -487,6 +501,8 @@ static void usart_echo(uint32_t idx, uint32_t base)
 	uint32_t i, ok, got, sr;
 
 	USART_BRR(base) = BRR_115200;
+	USART_CR1(base) = CR1_UE_TE;
+	delay_cycles(IDLE_FRAME_CYCLES);
 	USART_CR3(base) = CR3_HDSEL;
 	USART_CR1(base) = CR1_UE_TE_RE;
 	(void)USART_SR(base);
