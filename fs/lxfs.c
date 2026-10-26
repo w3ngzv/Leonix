@@ -38,6 +38,35 @@
  *
  * Only one task may use the filesystem, which holds for the shell and
  * the programs it runs.
+ *
+ * lxfs, 根文件系统: 1 KiB EEPROM 上的一个平坦目录.
+ *
+ * 设备分为 32 个 32 字节的块. 前部依次是超级块、与 FAT 相同的记录每个块下一块的
+ * 表, 以及目录; 其后的块存放文件数据.
+ *
+ *   0    超级块: 魔数 "LXFS", 版本号, 3 个未用字节
+ *   8    下一块表, 每块一个字节: LXFS_FREE、LXFS_END, 或同一文件下一块的
+ *        块号. 前三项对应从不成链的元数据块, 用作下文所述的大小日志.
+ *   40   目录, 共 LXFS_FILES 项: 名字、首块、大小
+ *   288  数据, 第 LXFS_DATA_FIRST 至 LXFS_BLOCKS - 1 块
+ *
+ * 空白 EEPROM 全部读出 0xff, 因此 LXFS_FREE 取 0xff, 空闲目录项以 0xff 开头: 格
+ * 式化只需写入超级块. 设备经由传给 lxfs_init() 的两个函数访问,
+ * tests/test_lxfs.c 因此可以在主机上运行本文件.
+ *
+ * 文件只在末尾写入: O_APPEND、O_TRUNC, 或空文件. 复位之后, 每个文件或保持操作之
+ * 前的样子, 或是操作之后的样子. 设备每次写一个字节, 一个字节要么完整写入, 要么
+ * 完全未写, 因此每种操作最后修改一个字节, 由该字节决定结果: 写入为大小, 创建与
+ * 删除为名字的第一个字节, 截断为首块. 数据先于覆盖它的大小写入设备. 两个字节都
+ * 要改变的大小先写入日志, 即下一块表的第 0 至 2 项: 依次为低字节、高字节, 最后
+ * 是目录项编号, 编号为 LXFS_FREE 表示没有日志.
+ *
+ * 复位还可能留下其他状态: 被占用却没有文件到达的块, 链接到文件末尾之后的块, 以
+ * 及尚未复制的日志. lxfs_init() 在下一次挂载时修复这些状态. lxfs_init() 也截断
+ * 离开数据区、成环或进入另一文件的块的链; 早先的内核可能留下这类链, 而此处的代
+ * 码原本会沿链走下去.
+ *
+ * 只允许一个任务使用该文件系统, shell 及其运行的程序满足这一条件.
  */
 #include <stddef.h>
 #include <string.h>
@@ -60,8 +89,16 @@
 #define DIR_OFF			(FAT_OFF + LXFS_BLOCKS)
 
 struct lxfs_dirent {
-	char name[NAME_MAX];		/* not terminated when NAME_MAX long */
-	uint8_t first;			/* LXFS_FREE while the file is empty */
+	/*
+	 * not terminated when NAME_MAX long
+	 * 长度为 NAME_MAX 时没有结束符
+	 */
+	char name[NAME_MAX];
+	/*
+	 * LXFS_FREE while the file is empty
+	 * 文件为空时为 LXFS_FREE
+	 */
+	uint8_t first;
 	uint8_t size_lo, size_hi;
 };
 
@@ -118,6 +155,8 @@ static uint8_t dirent_used(const struct lxfs_dirent *de)
 /*
  * Change the size of entry @index from @old to @size, through the log
  * when both bytes change.
+ *
+ * 把目录项 @index 的大小从 @old 改为 @size, 两个字节都改变时经由日志进行.
  */
 static void set_size(uint8_t index, uint16_t old, uint16_t size)
 {
@@ -132,7 +171,10 @@ static void set_size(uint8_t index, uint16_t old, uint16_t size)
 	dev_write(LOG_OFF, log, 1);
 }
 
-/* Give every block of a chain back. */
+/*
+ * give every block of a chain back
+ * 释放一条链上的每个块
+ */
 static void free_chain(uint8_t block)
 {
 	uint8_t next;
@@ -144,7 +186,10 @@ static void free_chain(uint8_t block)
 	}
 }
 
-/* The directory index of @name, or -ENOENT. */
+/*
+ * the directory index of @name, or -ENOENT
+ * @name 的目录项编号; 不存在时返回 -ENOENT
+ */
 static int find(const char *name)
 {
 	struct lxfs_dirent de;
@@ -158,7 +203,10 @@ static int find(const char *name)
 	return -ENOENT;
 }
 
-/* Check @rest, "/name", and return the name, or NULL with *err set. */
+/*
+ * check @rest, "/name", and return the name, or NULL with *err set
+ * 检查形如 "/name" 的 @rest 并返回名字; 不合法时返回 NULL 并设置 *err
+ */
 static const char *rest_to_name(const char *rest, int *err)
 {
 	const char *name = rest + 1;
@@ -171,7 +219,8 @@ static const char *rest_to_name(const char *rest, int *err)
 	if (len > NAME_MAX)
 		return NULL;
 	*err = -EINVAL;
-	if ((uint8_t)name[0] == LXFS_FREE)	/* a free entry starts so */
+	/* a free entry starts so; 空闲目录项以此开头 */
+	if ((uint8_t)name[0] == LXFS_FREE)
 		return NULL;
 	return name;
 }
@@ -206,7 +255,10 @@ static int lxfs_read(struct file *f, char *buf, uint8_t count)
 	return done;
 }
 
-/* A free data block, marked as the end of a chain, or LXFS_FREE. */
+/*
+ * a free data block, marked as the end of a chain, or LXFS_FREE
+ * 取一个空闲数据块并标为链尾; 没有空闲块时返回 LXFS_FREE
+ */
 static uint8_t alloc_block(void)
 {
 	uint8_t b;
@@ -267,8 +319,11 @@ static int lxfs_write(struct file *f, const char *buf, uint8_t count)
 
 /*
  * Byte @off of the file.  The chain is walked from the first block every
- * time, at most 22 steps on this device; the virtual machine fetches its
+ * time, at most one step per data block; the virtual machine fetches its
  * code this way when a program is run from lxfs.
+ *
+ * 文件的第 @off 字节. 每次都从首块开始沿链查找, 至多每个数据块一步; 从 lxfs 运
+ * 行程序时, 虚拟机以这种方式取指.
  */
 static int16_t lxfs_peek(struct file *f, uint16_t off)
 {
@@ -291,10 +346,20 @@ static const struct file_operations lxfs_file_fops = {
 	.peek = lxfs_peek,
 };
 
-/*
- * The next name in the directory.  The cursor is private_data, so that
- * fs/vfs.c can list its mount points first through f_pos and then hand
- * the same open file here.
+/**
+ * lxfs_readdir() - the next name in the root directory
+ * @f: the open directory
+ * @name: where to store the name
+ * @size: bytes in @name
+ *
+ * The cursor is private_data, so that fs/vfs.c can list its mount points
+ * first through f_pos and then hand the same open file here.
+ *
+ * 把根目录中的下一个名字写入 @name. 游标保存在 private_data 中, fs/vfs.c 因此
+ * 可以先以 f_pos 列出各挂载点, 再把同一个打开的文件交给本函数.
+ *
+ * Return: 1, or 0 after the last name.
+ * 成功时返回 1, 最后一个名字之后返回 0.
  */
 int lxfs_readdir(struct file *f, char *name, uint8_t size)
 {
@@ -317,7 +382,18 @@ static const struct file_operations lxfs_dir_fops = {
 	.readdir = lxfs_readdir,
 };
 
-/* Mounted at / by fs/vfs.c.  @rest is "/" or "/name". */
+/**
+ * lxfs_open() - open a file on lxfs
+ * @f: the file to fill in
+ * @rest: "/name"
+ * @flags: open() flags; writing needs O_APPEND, O_TRUNC or an empty file
+ *
+ * 打开 lxfs 上的文件 @rest. fs/vfs.c 把 lxfs 挂载在 /. 写入要求 O_APPEND、
+ * O_TRUNC 或空文件.
+ *
+ * Return: 0, or a negative errno; -EIO while nothing is mounted.
+ * 成功时返回 0, 失败时返回负的 errno; 未挂载时返回 -EIO.
+ */
 int lxfs_open(struct file *f, const char *rest, uint16_t flags)
 {
 	struct lxfs_dirent de;
@@ -348,7 +424,10 @@ int lxfs_open(struct file *f, const char *rest, uint16_t flags)
 		memset(&de, 0, sizeof(de));
 		strncpy(de.name, name, NAME_MAX);
 		de.first = LXFS_FREE;
-		/* the entry is in use once its first byte is */
+		/*
+		 * the entry is in use once its first byte is
+		 * 第一个字节写入之后, 该目录项才算被占用
+		 */
 		dev_write(DIR_OFF + index * DIRENT_SIZE + 1,
 			  (const uint8_t *)&de + 1, DIRENT_SIZE - 1);
 		dev_write(DIR_OFF + index * DIRENT_SIZE, &de, 1);
@@ -368,6 +447,15 @@ int lxfs_open(struct file *f, const char *rest, uint16_t flags)
 	return 0;
 }
 
+/**
+ * lxfs_unlink() - remove a file from lxfs
+ * @rest: "/name"
+ *
+ * 删除 lxfs 上的文件 @rest. 先清除名字的第一个字节, 再释放其块.
+ *
+ * Return: 0, or a negative errno; -EIO while nothing is mounted.
+ * 成功时返回 0, 失败时返回负的 errno; 未挂载时返回 -EIO.
+ */
 int lxfs_unlink(const char *rest)
 {
 	struct lxfs_dirent de;
@@ -388,7 +476,13 @@ int lxfs_unlink(const char *rest)
 	return 0;
 }
 
-/* Free data bytes, whole blocks only. */
+/**
+ * lxfs_free() - free data bytes
+ *
+ * Return: bytes in free blocks, whole blocks only; 0 while nothing is
+ * mounted.
+ * 空闲块中的字节数, 只计整块; 未挂载时返回 0.
+ */
 uint16_t lxfs_free(void)
 {
 	uint16_t free = 0;
@@ -406,6 +500,10 @@ uint16_t lxfs_free(void)
  * it leaves the data area or reaches a claimed block, and the size cut
  * to the blocks kept.  Blocks linked past them are cut off.  Returns 1
  * if anything was written.
+ *
+ * 使目录项 @index 与下一块表一致. 沿链走过其大小所需的块, 并在 *seen 中登记; 链
+ * 离开数据区或到达已登记的块时截断, 大小随之缩减到保留下来的块. 链接在这些块之
+ * 后的块被切断. 有任何写入时返回 1.
  */
 static uint8_t check_file(uint8_t index, uint32_t *seen)
 {
@@ -439,7 +537,11 @@ static uint8_t check_file(uint8_t index, uint32_t *seen)
 	return fixed;
 }
 
-/* Finish a logged size, then make the table and the directory agree. */
+/*
+ * Finish a logged size, then make the table and the directory agree.
+ *
+ * 完成日志中记下的大小修改, 再使下一块表与目录一致.
+ */
 static uint8_t lxfs_check(void)
 {
 	struct lxfs_dirent de;
@@ -469,11 +571,23 @@ static uint8_t lxfs_check(void)
 	return fixed;
 }
 
-/*
- * Attach the device.  A device without the magic is formatted, which on
- * a blank EEPROM writes the superblock alone.  One with the magic and
- * another version is left as it is and not mounted, so that a kernel
- * flashed over a newer one does not destroy its files.
+/**
+ * lxfs_init() - mount lxfs on a device
+ * @read: reads the device
+ * @write: writes the device
+ *
+ * A device without the magic is formatted, which on a blank EEPROM
+ * writes the superblock alone.  One with the magic and another version
+ * is left as it is and not mounted, so that a kernel flashed over a
+ * newer one does not destroy its files.
+ *
+ * 挂载经由 @read 与 @write 访问的设备. 没有魔数的设备被格式化, 在空白 EEPROM 上
+ * 这只写入超级块. 有魔数而版本不同的设备保持原样, 不挂载, 使覆盖烧录到较新内核
+ * 之上的旧内核不会破坏其文件.
+ *
+ * Return: LXFS_CLEAN, LXFS_FORMATTED or LXFS_REPAIRED, or -EINVAL for
+ * an unknown version.
+ * 返回 LXFS_CLEAN、LXFS_FORMATTED 或 LXFS_REPAIRED; 版本未知时返回 -EINVAL.
  */
 int lxfs_init(lxfs_read_fn read, lxfs_write_fn write)
 {

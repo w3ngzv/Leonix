@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * /bin: a read-only filesystem in flash, built from user/bin by
- * tools/mkromfs.py, the way Linux carries its first programs in an
- * initramfs.  The files are the programs of the virtual machine; their
- * bytes can be read like any file's.
+ * /bin: a read-only filesystem in flash, packed by tools/mkromfs.py from
+ * the programs Leonix_coreutils builds, as Linux carries its first
+ * programs in an initramfs.
+ *
+ * /bin: flash 中的只读文件系统, 由 tools/mkromfs.py 将 Leonix_coreutils
+ * 构建出的程序打包而成, 与 Linux 把最初的程序放在 initramfs 中的做法相同.
  */
 #include <avr/pgmspace.h>
 #include <string.h>
@@ -54,7 +56,19 @@ static const struct file_operations romfs_dir_fops = {
 	.readdir = romfs_readdir,
 };
 
-/* Mounted at /bin by fs/vfs.c.  @rest is "" or "/", or "/name". */
+/**
+ * romfs_open() - open /bin or a program in it
+ * @f: the file to fill in
+ * @rest: the path after "/bin": "" or "/" for the directory, or "/name"
+ * @flags: open() flags
+ *
+ * 打开 /bin 或其中的程序. @rest 是 "/bin" 之后的路径, "" 或 "/" 表示目录
+ * 本身, "/name" 表示程序.
+ *
+ * Return: 0, -EROFS for writing or O_CREAT, or -ENOENT if no program has
+ * the name.  成功时返回 0, 以写方式或带 O_CREAT 打开时返回 -EROFS, 没有
+ * 同名程序时返回 -ENOENT.
+ */
 int romfs_open(struct file *f, const char *rest, uint16_t flags)
 {
 	uint8_t i;
