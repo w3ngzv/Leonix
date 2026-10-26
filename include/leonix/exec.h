@@ -5,6 +5,6 @@
 /* Most words a command line is cut into, the program name included. */
 #define MAX_ARGS	6
 
-int exec(int argc, char **argv);
+int exec(int argc, const char *const argv[]);
 
 #endif /* _LEONIX_EXEC_H */

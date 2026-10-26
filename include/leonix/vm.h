@@ -84,6 +84,6 @@ uint8_t vm_run(struct vm *vm);
 int16_t vm_pop(struct vm *vm);
 void vm_push(struct vm *vm, int16_t value);
 int16_t vm_load_byte(struct vm *vm, uint16_t addr);
-int vm_args(struct vm *vm, int argc, char *const argv[]);
+int vm_args(struct vm *vm, int argc, const char *const argv[]);
 
 #endif /* _LEONIX_VM_H */

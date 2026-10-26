@@ -145,7 +145,7 @@ int vm_load(struct vm *vm, uint16_t file_len)
  * Linux, and push argc and argv for the program's first instruction.
  * Returns 0, or -1 if they do not fit.
  */
-int vm_args(struct vm *vm, int argc, char *const argv[])
+int vm_args(struct vm *vm, int argc, const char *const argv[])
 {
 	uint16_t table = vm->data_len;
 	uint16_t strings = table + (argc + 1) * 2;
