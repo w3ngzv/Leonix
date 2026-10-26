@@ -1,0 +1,538 @@
+.. SPDX-License-Identifier: GPL-2.0-only
+
+=====================
+STM32F103C8T6 核心板
+=====================
+
+**STM32F103C8T6** 是 STMicroelectronics 生产的 32 位微控制器, 属于
+STM32F1 系列的增强型产品线 (performance line), 内核为 Arm Cortex-M3.
+Leonix 运行在 Arduino Leonardo 上, 该芯片是 drivers/swd.c 的调试对象,
+也是 tests/stm32 中测试程序的运行平台.
+
+本文面向第一次接触 STM32 的读者, 依次说明该芯片的型号、存储器、启动、
+时钟、外设寄存器与指令集, 然后说明在没有板子的情况下如何编写并检查
+tests/stm32 的代码. 每项事实都注明出处, 所引文档的修订版与下载地址见
+references/index.rst:
+
+  - DS5319 Rev 20, STM32F103x8/xB 数据手册: 该型号的引脚与电气参数
+  - RM0008 Rev 15, STM32F10xxx 参考手册: 整个系列的存储器与外设寄存器
+  - PM0056 Rev 5, STM32F10xxx Cortex-M3 编程手册: 内核与指令集
+
+参考手册覆盖整个 STM32F10xxx 系列, 订购信息、机械与电气特性则由该手册
+的前言指向各型号的数据手册. 查阅某一外设时, 先在数据手册中确认该型号
+具备该外设, 再查阅参考手册中的寄存器说明.
+
+
+型号
+====
+
+型号中各段的含义由 DS5319 第 7 节规定::
+
+  STM32   Arm 内核的 32 位微控制器
+  F       通用型
+  103     增强型产品线
+  C       48 引脚
+  8       64 KB Flash; 若为 B 则是 128 KB
+  T       LQFP 封装
+  6       工作温度 -40 至 85 摄氏度
+
+STM32F103C8 与 STM32F103CB 共用 DS5319, 按该手册表 2, 两者的区别只在
+Flash 容量.
+芯片在 0x1FFFF7E0 处以 KB 为单位保存自身的 Flash 容量 (RM0008 30.1.1).
+本项目所用的板子印字为 C8, 该寄存器却读出 128 KB, 2026-10-19 对 128 KB
+逐页擦除并整片写入校验, 没有出现错误. ST 只保证 C8 有 64 KB, 为本项目
+编写的程序应当控制在 64 KB 以内.
+
+
+存储器映射
+==========
+
+Cortex-M3 只有一个 32 位地址空间, Flash、SRAM 与外设寄存器各占其中的
+固定区间. 下列地址取自 RM0008 3.3 节表 3、3.3.2 节、30.1.1 节与 30.2 节,
+SRAM 容量取自 DS5319 第 2 节, 内核外设的区间取自 PM0056 2.2 节::
+
+  0x00000000  启动区, 映射 Flash、系统存储器或 SRAM 之一, 见下一节
+  0x08000000  Flash, C8 为 64 KB, CB 为 128 KB
+  0x1FFFF000  系统存储器, 2 KB, ST 出厂写入的 bootloader
+  0x1FFFF7E0  Flash 容量寄存器
+  0x1FFFF7E8  96 位唯一 ID
+  0x1FFFF800  选项字节, 16 字节
+  0x20000000  SRAM, 20 KB
+  0x22000000  SRAM 的位带别名区
+  0x40000000  外设寄存器, 例如 0x40013800 为 USART1, 0x40021000 为 RCC
+  0x42000000  外设寄存器的位带别名区
+  0xE0000000  内核外设: NVIC、SysTick、SCB 与调试部件
+
+**位带** (bit-banding) 是 Cortex-M3 的一项机制: 别名区中的每个字对应
+原区间中的一位, 向该字写入的值只有第 0 位有效, 写 1 即置位、写 0 即
+清除对应的位 (PM0056 2.2.5). 向别名区写入一个字, 效果与对原区间中该位
+做一次 "读出、修改、写回" 相同 (RM0008 3.3.2). 该机制只对内核的访问有效,
+DMA 等其他总线主设备的访问不经过位带映射 (同上). tests/stm32/isa.c 的
+check_memory() 检查该机制.
+
+
+复位与启动
+==========
+
+复位之后, 芯片在 SYSCLK 的第 4 个上升沿锁存 BOOT1 与 BOOT0 两个引脚,
+据此决定映射到 0x00000000 的存储器 (RM0008 3.4 节表 9)::
+
+  BOOT1  BOOT0  启动区
+  x      0      Flash
+  0      1      系统存储器, 即 ST 的 bootloader
+  1      1      SRAM
+
+随后内核从 0x00000000 读取栈顶的值, 再从 0x00000004 处开始执行 (RM0008
+3.4); 0x00000004 处保存的是复位处理程序的地址 (RM0008 表 63 中 Reset
+一项). 这两个字是**向量表** (vector table) 的前两项, 其后依次是 NMI、
+HardFault、MemManage、BusFault、UsageFault 等异常的处理程序地址
+(PM0056 2.3.4 节图 12). 每个向量的最低位都必须为 1, 表示
+处理程序是 Thumb 代码 (同上); C 编译器取 Thumb 函数的地址时, 最低位已经
+置 1. tests/stm32/runtime.c 末尾的 vectors 数组就是这样一张表, 链接脚本
+tests/stm32/stm32.ld 把该数组放在 Flash 的起始处.
+
+系统存储器中的 bootloader 经 USART1 重新编程 Flash (RM0008 3.4 节
+"Embedded boot loader"). 本项目经 SWD 烧录, 不使用该 bootloader.
+
+
+时钟
+====
+
+复位后芯片以内部 8 MHz RC 振荡器 HSI 运行 (RM0008 7.2). 本项目的核心板
+另有一颗 8 MHz 晶振, 作为外部时钟 HSE; 经锁相环 PLL 九倍频后, 系统时钟
+SYSCLK 为 72 MHz, 即该型号的上限 (DS5319 第 2 节). 运行在更高的 SYSCLK
+时, 需要满足两条约束:
+
+- Flash 的等待周期. SYSCLK 不超过 24 MHz 时为 0, 不超过 48 MHz 时为 1,
+  不超过 72 MHz 时为 2 (RM0008 3.3.3). 等待周期由 FLASH_ACR 的 LATENCY
+  字段设置.
+- APB1 总线的频率上限为 36 MHz, APB2 可达 72 MHz (RM0008 3.1). 72 MHz
+  运行时 APB1 必须二分频.
+
+APB 的分频还影响定时器: APB 预分频为 1 时, 定时器时钟等于所在 APB 的
+时钟, 否则为 APB 时钟的两倍 (RM0008 7.2). 72 MHz 运行时 APB1 为
+36 MHz, 挂在 APB1 上的 TIM2 至 TIM4 仍以 72 MHz 计数. tests/stm32/signal.c
+的模式 3 按这一规则设置 TIM4; 若规则不成立, 输出频率减半, 检查即失败.
+
+HSI 的出厂精度在 0 至 70 摄氏度之间为 -1.3 % 至 +2 % (DS5319 表 24). 使用
+USB 时, PLL 的输出须为 48 MHz 或 72 MHz, RCC_CFGR 的 USBPRE 位再对其不
+分频或 1.5 分频, 得到 USB 所需的 48 MHz (RM0008 7.2 与 7.3.2).
+
+
+外设寄存器
+==========
+
+每个外设是 0x40000000 以上的一组 32 位寄存器, 各外设的基址见 RM0008 3.3
+节表 3, 寄存器的偏移见各外设章节末尾的寄存器表. 外设的时钟由 RCC 的
+AHBENR、APB2ENR 与 APB1ENR 三个寄存器控制, 每个外设占其中一位 (RM0008
+5.3 与 7.3.6 至 7.3.8). APB2ENR 与 APB1ENR 的复位值为 0, AHBENR 的复位值
+0x14 只打开 SRAM 与 Flash 接口 (同上), 因此使用 GPIO、USART 等外设之前,
+必须先置位其时钟使能位.
+
+STM32F1 的每个 GPIO 引脚在 CRL (引脚 0
+至 7) 或 CRH (引脚 8 至 15) 中占 4 位, 低 2 位 MODE 选择输入或输出速度,
+高 2 位 CNF 选择推挽、开漏、复用或输入方式 (RM0008 9.2.1 与 9.2.2). 例如
+0xA 即 CNF = 10、MODE = 10, 表示 2 MHz 的复用推挽输出; 全双工 USART 的 TX 引脚
+规定为这一配置 (RM0008 9.1.11 表 24).
+
+下面的程序经 USART1 输出一行文字, 其中依次包含上述两步. 代码按 Linux 的
+编码风格书写, 注释同时写英文与中文, 与本仓库其余代码相同:
+
+.. code-block:: c
+
+   // SPDX-License-Identifier: GPL-2.0-only
+   /*
+    * Print one line on USART1 (PA9) at 115200 baud from the 8 MHz HSI.
+    *
+    * 以 8 MHz 的 HSI 为时钟, 在 USART1 (PA9) 上以 115200 波特率输出一行.
+    */
+   #include <stdint.h>
+
+   #define REG(a)		(*(volatile uint32_t *)(a))
+   #define RCC_APB2ENR	REG(0x40021018)
+   #define GPIOA_CRH	REG(0x40010804)
+   #define USART1_SR	REG(0x40013800)
+   #define USART1_DR	REG(0x40013804)
+   #define USART1_BRR	REG(0x40013808)
+   #define USART1_CR1	REG(0x4001380c)
+
+   #define APB2_IOPAEN	(1u << 2)
+   #define APB2_USART1EN	(1u << 14)
+   #define PA9_MASK	(0xfu << 4)
+   #define PA9_AF_PP	(0xau << 4)	/* CNF 10, MODE 10 */
+   #define SR_TXE		(1u << 7)
+   #define CR1_UE		(1u << 13)
+   #define CR1_TE		(1u << 3)
+   #define HSI_HZ		8000000u
+   #define BAUD		115200u
+   #define STACK_TOP	0x20002000u
+
+   static void usart1_putc(char c)
+   {
+   	while (!(USART1_SR & SR_TXE))
+   		;
+   	USART1_DR = c;
+   }
+
+   void reset_handler(void)
+   {
+   	const char *s = "hello from STM32F103\r\n";
+
+   	/* GPIOA and USART1 are unclocked after reset; 复位后两者无时钟 */
+   	RCC_APB2ENR |= APB2_IOPAEN | APB2_USART1EN;
+   	GPIOA_CRH = (GPIOA_CRH & ~PA9_MASK) | PA9_AF_PP;
+   	USART1_BRR = HSI_HZ / BAUD;
+   	USART1_CR1 = CR1_UE | CR1_TE;
+   	while (*s)
+   		usart1_putc(*s++);
+   	for (;;)
+   		;
+   }
+
+   __attribute__((section(".vectors"), used))
+   static const uint32_t vectors[2] = {
+   	STACK_TOP,
+   	(uint32_t)reset_handler,
+   };
+
+波特率寄存器 BRR 的值是 USART 时钟与波特率之比 (RM0008 27.3.4 的
+USARTDIV 乘以 16), 8000000 / 115200 取整为 69, 实际波特率 115942, 误差
+0.6 %. USART1 的时钟是 PCLK2 (RM0008 27.3.4), 复位后 APB2 的时钟即为
+HSI 的 8 MHz. 向量表只有两项, 栈顶 0x20002000 位于 SRAM 的前 8 KB
+之内, 同一映像因此也能在下文的 QEMU 中运行. 该程序在任何异常发生时都
+没有处理程序可用, 只适合作为第一个程序; tests/stm32/runtime.c 给出了
+完整的 16 项向量表.
+
+
+指令集
+======
+
+Cortex-M3 执行的是 **Thumb** 指令集的一个版本 (PM0056 3.1). 许多指令
+按操作数与目的寄存器的不同, 编码为 16 位或 32 位, 汇编时可以用 .N 与 .W
+后缀强制选择长度 (PM0056 3.3.8).
+
+内核有 13 个通用寄存器 R0 至 R12, 以及栈指针 SP (R13)、链接寄存器
+LR (R14) 与程序计数器 PC (R15) (PM0056 2.1.3). 运算结果的标志位 N (负)、
+Z (零)、C (进位)、V (溢出) 与饱和标志 Q 保存在 APSR 中.
+
+PM0056 表 20 列出了 Cortex-M3 的全部指令. 下文按该手册第 3 章的分组逐类
+说明, 括号中是 PM0056 的节号. 指令名后带 S 的形式 (如 ADDS) 按结果更新
+标志位, 不带 S 的形式不更新. 指令可以加条件后缀, 如 ADDEQ 只在 Z 为 1 时
+执行; 除条件跳转之外, 带条件后缀的指令必须位于 IT 块中 (3.3.7, 3.8.7).
+标有 "isa.c" 的项目在 tests/stm32/isa.c 中有对应的检查.
+
+第二操作数
+----------
+
+许多数据处理指令的第二操作数 Op2 可以是常数, 也可以是带移位的寄存器
+(3.3.3). 常数须能由一个 8 位值左移得到, 或者是 0x00XY00XY、0xXY00XY00、
+0xXYXYXYXY 三种形式之一. 其余的 32 位常数可由 ``MOV Rd, #imm16`` (即
+MOVW) 写入低 16 位, 再由 MOVT 写入高 16 位 (3.5.6, 3.5.7).
+寄存器形式写作 ``R1, LSL #3`` 一类, 移位与运算在同一条指令中完成, 例如::
+
+  add  r0, r1, r2, lsl #2   /* r0 = r1 + r2 * 4; 数组下标乘 4 */
+
+存储器访问 (3.4)
+----------------
+
+LDR, STR 及其 B、H、SB、SH、D 形式
+  在寄存器与存储器之间传送字、字节、半字或两个字; SB 与 SH 读出后做符号
+  扩展. 地址由基址寄存器加立即数偏移或寄存器偏移构成, 可选在访问前后
+  更新基址寄存器 (3.4.2, 3.4.3). Cortex-M3 允许 LDR、STR 与半字访问不按
+  宽度对齐, LDRD、STRD、LDM 与 STM 则必须字对齐 (3.3.5). isa.c
+
+LDRT, STRT 等带 T 的形式
+  功能与立即数偏移的 LDR、STR 相同, 区别是即使在特权级代码中执行, 访问
+  也按非特权级进行 (3.4.4).
+
+LDR, PC 相对
+  从以 PC 为基址的地址读取数据, 用于读取放在代码附近的常数 (3.4.5).
+
+LDM, STM, PUSH, POP
+  一条指令读写多个寄存器. PUSH 与 POP 是以 SP 为基址、并写回 SP 的 STMDB
+  与 LDM 的同义写法 (3.4.6, 3.4.7).
+
+LDREX, STREX, CLREX
+  独占访问, 用于实现原子操作. LDREX 读取并标记该地址, 之后的 STREX 只在
+  标记仍然有效时写入, 写入成功时在目的寄存器中返回 0, 失败时返回 1;
+  CLREX 清除标记 (3.4.8, 3.4.9). isa.c
+
+ADR
+  把 PC 加上偏移得到的地址装入寄存器, 生成与位置无关的地址 (3.4.1).
+
+数据处理 (3.5)
+--------------
+
+ADD, ADC, SUB, SBC, RSB
+  加、带进位加、减、带借位减与反向减 (RSB 计算 Op2 - Rn). 带 W 的
+  ADDW 与 SUBW 接受 12 位立即数 (3.5.1).
+
+AND, ORR, EOR, BIC, ORN
+  按位与、或、异或、与非 (Rn AND NOT Op2) 与或非 (Rn OR NOT Op2)
+  (3.5.2).
+
+ASR, LSL, LSR, ROR, RRX
+  算术右移、逻辑左移、逻辑右移、循环右移与带进位的一位循环右移. 移位量
+  来自寄存器时只取其最低字节; 移位量达到或超过 32 时, LSL 与 LSR 的结果
+  为 0, ASR 的结果每一位都等于原值的第 31 位 (3.3.4, 3.5.3). isa.c
+
+CMP, CMN, TST, TEQ
+  只更新标志位、不保存结果的比较: CMP 相当于减法, CMN 相当于加法, TST
+  相当于按位与, TEQ 相当于按位异或 (3.5.5, 3.5.9). isa.c 的 IT 检查以
+  CMP 设置条件.
+
+MOV, MVN, MOVT
+  MOV 传送, MVN 传送按位取反后的值, MOVT 写入寄存器的高 16 位而保留低
+  16 位 (3.5.6, 3.5.7).
+
+CLZ, REV, REV16, REVSH, RBIT
+  CLZ 统计最高位起连续的 0 的个数. REV 颠倒一个字的字节序, REV16 分别
+  颠倒两个半字的字节序, REVSH 颠倒低半字的字节序并做符号扩展, RBIT 颠倒
+  32 位的位序 (3.5.4, 3.5.8). isa.c
+
+乘法与除法 (3.6)
+----------------
+
+MUL, MLA, MLS
+  32 位乘法, 只保留乘积的低 32 位. MLA 计算 Ra + Rn * Rm, MLS 计算
+  Ra - Rn * Rm (3.6.1). isa.c 检查 MLA 与 MLS.
+
+UMULL, SMULL, UMLAL, SMLAL
+  无符号与有符号的 32 x 32 位乘法, 得到 64 位结果, 分别存入两个寄存器;
+  带 A 的形式把乘积加到这两个寄存器原有的 64 位值上 (3.6.2). isa.c
+
+UDIV, SDIV
+  无符号与有符号除法, 商向零取整 (3.6.3). 除数为 0 时结果为 0; 若 SCB
+  的 CCR 中 DIV_0_TRP 置位, 则改为触发 UsageFault, CFSR 中置位 DIVBYZERO
+  (PM0056 4.4.7, 4.4.10). isa.c 两种情形都检查.
+
+饱和 (3.7)
+----------
+
+SSAT, USAT
+  把有符号数限制在 n 位的有符号或无符号范围之内, 超出时取最接近的边界值
+  并置位 APSR 的 Q 标志. SSAT 的 n 为 1 至 32, USAT 的 n 为 0 至 31
+  (3.7.1). Q 标志只能由 MSR 清除 (同上). isa.c
+
+位域 (3.8)
+----------
+
+BFC, BFI
+  BFC 把寄存器中从 lsb 起的 width 位清零, BFI 把另一寄存器的低 width 位
+  插入该位置 (3.8.1). isa.c
+
+SBFX, UBFX
+  取出从 lsb 起的 width 位, 分别做符号扩展或零扩展后放入目的寄存器
+  (3.8.2). 读取寄存器中的某个字段只需这一条指令. isa.c
+
+SXTB, SXTH, UXTB, UXTH
+  把字节或半字做符号扩展或零扩展, 扩展前可以循环右移 8、16 或 24 位
+  (3.8.3).
+
+跳转与控制 (3.8.4 至 3.8.8)
+---------------------------
+
+PM0056 Rev 5 把跳转指令编在位域一节之后, 节号沿用 3.8.
+
+B, BL, BX, BLX
+  B 跳转; BL 跳转并把返回地址存入 LR, 用于函数调用. BX 与 BLX 跳转到
+  寄存器中的地址, 该地址的第 0 位必须为 1, 否则触发 UsageFault (3.8.5).
+  isa.c 以 BX 跳转到偶数地址, 检查该故障.
+
+CBZ, CBNZ
+  寄存器为 0 或不为 0 时向前跳转, 不改变标志位. 寄存器限于 R0 至 R7,
+  目标须在指令之后 4 至 130 字节之内 (3.8.6).
+
+IT
+  使其后至多 4 条指令成为条件执行, 例如 ITE EQ 使下一条指令在 Z 为 1 时
+  执行、再下一条在 Z 为 0 时执行. IT 块中不能出现 IT、CBZ、CBNZ、CPSID
+  与 CPSIE, 改变 PC 的指令只能是块中的最后一条 (3.8.7). isa.c
+
+TBB, TBH
+  查表跳转: 以一个寄存器为表的基址、另一个为下标, 读出字节 (TBB) 或半字
+  (TBH), 向前跳转该值的两倍个字节. 以 PC 为基址时, 表紧随该指令之后
+  (3.8.8). isa.c
+
+其他 (3.9)
+----------
+
+MRS, MSR
+  读写特殊寄存器, 如 APSR、PRIMASK、CONTROL 与两个栈指针 MSP、PSP
+  (3.9.6, 3.9.7). isa.c 以 MRS 读出饱和与移位之后的标志位.
+
+CPSIE, CPSID
+  清除或置位 PRIMASK (写作 I) 与 FAULTMASK (写作 F), 即开关中断
+  (3.9.2).
+
+DMB, DSB, ISB
+  存储器屏障. DMB 保证其前的存储器访问在其后的访问之前完成; DSB 等待其前
+  的访问全部完成后才执行后续指令; ISB 清空流水线, 使其后的指令重新取指
+  (3.9.3 至 3.9.5).
+
+SVC, BKPT
+  SVC 触发 SVCall 异常, 异常处理程序可以读取指令中的立即数, 判断所请求的
+  服务. BKPT 使内核进入调试状态, 调试工具借此在指定地址处检查系统状态
+  (3.9.10, 3.9.1).
+
+WFI, WFE, SEV, NOP
+  WFI 暂停执行, 直到发生异常或调试请求. WFE 在事件寄存器为 0 时暂停执行,
+  直到发生异常、SEV 发出的事件等情形之一. SEV 发出事件 (3.9.9, 3.9.11,
+  3.9.12). 进入睡眠模式的方式就是执行 WFI 或 WFE (RM0008 5.3.3). NOP 不做
+  任何操作 (3.9.8).
+
+不支持的指令
+------------
+
+SMLAD、QADD、UADD8、SEL 一类 DSP 指令与 VADD.F32 一类浮点指令都不在
+PM0056 表 20 中. isa.c 检查这些指令触发 UsageFault: 2026-10-26 在本项目的
+板子上, DSP 指令置位 CFSR 的 UNDEFINSTR (未定义指令), 浮点指令置位 NOCP
+(访问不存在的协处理器), 两位的含义见 PM0056 4.4.10. 当日运行的是 isa.c
+合入仓库之前的版本. 编译时须指定 ``-mcpu=cortex-m3``, 编译器才只生成
+表 20 中的指令.
+
+
+调试与烧录
+==========
+
+STM32F103 的调试接口是 **SWD** (Serial Wire Debug), 只用两根信号线:
+PA13 为 SWDIO, PA14 为 SWCLK, 两者都是 5 V 容忍引脚 (DS5319 表 5). 本
+项目用过两种调试器:
+
+- ST-LINK/V2 及其兼容品, 由 OpenOCD 驱动, 板子由 ST-LINK 的 3.3 V 引脚
+  供电.
+- 运行 Leonix 的 Leonardo, 以 D8 驱动 SWCLK、D9 传输 SWDIO, SWDIO 线上
+  串联约 1 kOhm 的电阻, 实现见 drivers/swd.c.
+
+两种调试器不能同时接在 SWD 线上.
+
+用 ST-LINK 时接四根线: SWDIO、SWCLK、GND 与 3.3 V. 用下列命令确认连接::
+
+  openocd -f interface/stlink.cfg -c "set CPUTAPID 0" \
+          -f target/stm32f1x.cfg -c "init; halt; mdw 0xE0042000; shutdown"
+
+输出中应有 ``Cortex-M3 r1p1 processor detected`` 一行, 0xe0042000 处为
+DBGMCU_IDCODE, 其低 12 位为 0x410 表示中容量器件 (RM0008 31.6.1). 本
+项目的命令都带 ``set CPUTAPID 0``, 不带该参数时能否连接没有试过. Flash
+为空时, 本项目的板子 halt 后停在 HardFault 处理模式, PC 为 0xFFFFFFFE,
+与复位向量读出 0xFFFFFFFF 的情形相符.
+
+2026-10-26 用 stlink 工具集 1.9.0 的 ``st-info --probe`` 连接 Flash 为空、
+内核处于锁定状态的板子时, 芯片 ID 读出 0, 随后 ST-LINK 不再响应, 拔插之后
+才恢复. 本项目因此只用 OpenOCD.
+
+
+没有板子时
+==========
+
+tests/stm32 中的指令检查可以在 QEMU 的 stm32vldiscovery 机型上运行. 该
+机型模拟的芯片是 STM32F100RBT6, 与 STM32F103 同属 F1 系列, 内核同为
+Cortex-M3. 两者的差别如下, 依据是 QEMU 11.1.2 的
+hw/arm/stm32f100_soc.c 与本项目的运行结果:
+
+- SRAM 只有 8 KB. tests/stm32 的 SRAM 布局按 8 KB 安排.
+- 只有三个 USART 与两个 SPI 被实际模拟. RCC、GPIO、定时器、ADC、DMA、
+  CRC、RTC 等由 create_unimplemented_device() 占位, 不具备外设的行为.
+  QEMU 文档 docs/system/arm/stm32.rst 把 ADC 与定时器列为已支持, 这一点
+  对 stm32vldiscovery 不成立.
+- 没有 DWT, 周期计数读出 0.
+- SMLAD 能够执行, 而 Cortex-M3 上应当触发 UsageFault. isa_check.py 在
+  QEMU 下只记录该项.
+
+因此 QEMU 能检查的是内核、指令集与 USART 的输出, 外设寄存器的代码只能
+在板上检查.
+
+安装工具
+--------
+
+macOS, Homebrew::
+
+  brew install arm-none-eabi-gcc qemu
+
+Debian, Ubuntu::
+
+  sudo apt install gcc-arm-none-eabi qemu-system-arm python3 make
+
+本文的命令在 macOS 上以 arm-none-eabi-gcc 16.2.0、QEMU 11.1.2 与
+Python 3.14 运行过. Debian 的两个包名在 Debian 13 (trixie) 的软件包列表中
+存在, 但没有在 Debian 上运行过.
+
+运行第一个程序
+--------------
+
+把上文的程序保存为 hello.c, 在仓库根目录编译并运行::
+
+  arm-none-eabi-gcc -mcpu=cortex-m3 -mthumb -O2 -ffreestanding -nostdlib \
+          -T tests/stm32/stm32.ld -Wl,-e,reset_handler -o hello.elf hello.c
+  qemu-system-arm -M stm32vldiscovery -kernel hello.elf -nographic
+
+终端中出现 ``hello from STM32F103``. 按 Ctrl-A, 松开后按 X, 退出 QEMU.
+
+运行项目的检查
+--------------
+
+在仓库根目录运行::
+
+  make check-stm32
+
+最后一行应为 ``all passed``. 该目标编译 tests/stm32/isa.elf, 在 QEMU 中
+运行, 再由 tests/stm32/isa_check.py 逐项比对结果.
+
+增加一项检查
+------------
+
+isa.c 尚未检查 SXTB. 下面以 SXTB 为例, 说明增加一项指令检查的全部步骤.
+
+1. 在 tests/stm32/isa.c 的操作码枚举中, 在 ``OP_CYC_UMULL,`` 之后加入
+   ``OP_SXTB,``.
+
+2. 在 check_alu() 的第二个循环中, 紧随 ``rec(OP_REVSH, ...)`` 一行加入::
+
+	rec(OP_SXTB, a, 0, 0, OP1("sxtb", a), 0);
+
+3. 在 tests/stm32/isa_check.py 中, 把 ``SXTB`` 加在 OPS 字符串的
+   ``CYC_UMULL`` 之后, 使两边的编号一致; 再在 expect() 的 simple 字典中
+   加入一项::
+
+       "SXTB": lambda: (((a & 0xFF) ^ 0x80) - 0x80) & M32,
+
+   期望值依 PM0056 3.8.3: 取低 8 位, 按第 7 位做符号扩展.
+
+4. 运行 ``make check-stm32``. passed 一行中应出现 ``SXTB 22``. 期望值写错
+   时, 输出中出现以 ``FAIL  SXTB:`` 开头的行, 列出输入、实测值与期望值.
+
+5. 运行 ``scripts/checkstyle.sh tests/stm32/isa.c``, 输出应为空.
+
+期望值必须依据文献独立写出, 不能把板子或 QEMU 的输出抄进 isa_check.py.
+否则检查只能说明结果没有变化, 无法说明结果正确.
+
+提交
+----
+
+提交前按 CONTRIBUTING.zh_CN 运行全部检查. tests/stm32 的改动在提交说明中
+写明是否在板上运行过; 只在 QEMU 中运行过的改动同样可以提交, 由有板子的
+人在合并前在板上运行. 改动 periph.c 或 signal.c 时, QEMU 无法提供任何
+检查, 提交说明中应写出所依据的 RM0008 或 DS5319 章节.
+
+
+在板上运行
+==========
+
+接好 ST-LINK 之后, 指令检查与外设检查分别为::
+
+  make stm32-tests
+  python3 tests/stm32/stm32test.py --stlink tests/stm32/isa.elf
+  python3 tests/stm32/stm32test.py --stlink tests/stm32/periph.elf
+
+外设检查读取 PB12 至 PB15 的上拉与下拉电阻, 这四个引脚不得连接任何
+东西. ADC 一项以内部参考电压估算 VDDA, 与 ST-LINK 测得的电压比较.
+
+频率检查另需运行 Leonix 的 Leonardo 作为频率计. 把被测引脚接到 Leonardo
+的 D13, 两块板的 GND 相连, Leonardo 的 D8 与 D9 断开, 然后运行::
+
+  python3 tests/stm32/signal_check.py --leonix /dev/cu.usbmodemNNNN \
+          --pin PA8 tests/stm32/signal.elf
+
+/dev/cu.usbmodemNNNN 换成 Leonardo 实际的串口. --pin 可取 PA8、PB6 与
+PA9, 各引脚输出的信号见 tests/stm32/signal.c 开头的注释. 这三个引脚都
+是 5 V 容忍引脚 (DS5319 表 5): Leonix 测量结束后把 D13 重新设为输出,
+5 V 电平会加到被测引脚上.
