@@ -55,8 +55,12 @@ static void ee_write(uint16_t off, const void *buf, uint16_t len)
 	}
 }
 
-#define CHECK(cond) do { if (!(cond)) { \
-	printf("FAIL line %d: %s\n", __LINE__, #cond); fails++; } } while (0)
+#define CHECK(cond) do {						\
+	if (!(cond)) {							\
+		printf("FAIL line %d: %s\n", __LINE__, #cond);		\
+		fails++;						\
+	}								\
+} while (0)
 
 static int fs_open(struct file *f, const char *name, uint16_t flags)
 {
