@@ -204,7 +204,7 @@ mrproper: clean
 # By directory, as Linux's clean: objects of options now off go too.
 clean:
 	rm -f $(foreach d,$(kbuild-dirs),$(d)/*.o $(d)/*.d) $(TARGET).elf $(TARGET).hex $(TARGET).map $(TEST_BIN) \
-		$(TEST_VM_PROGS) fs/romfs_image.c
+		$(TEST_VM_PROGS) fs/romfs_image.c tests/test_lxfs.avr.elf
 
 # Host tests of the code in lib/, which has no AVR dependency.
 HOSTCC ?= cc
@@ -236,6 +236,21 @@ tests/test_lxfs: tests/test_lxfs.c fs/lxfs.c include/leonix/lxfs.h include/leoni
 	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $@ \
 		tests/test_lxfs.c fs/lxfs.c
 
+# The lxfs test again, built by avr-gcc and run under qemu-system-avr,
+# which has no ATmega32U4: an ATmega2560 runs it, the EEPROM is an array
+# as on the host, and stdout is USART0.  It checks the code avr-gcc makes
+# of fs/lxfs.c, with its 16-bit int, which the host test cannot.
+QEMU_AVR ?= qemu-system-avr
+QEMU_TIMEOUT ?= 300
+
+tests/test_lxfs.avr.elf: tests/test_lxfs.c tests/qemu_uart.c fs/lxfs.c \
+		include/leonix/lxfs.h include/leonix/fs.h
+	$(CC) -mmcu=atmega2560 -Os -std=gnu11 -Wall -Wextra -Werror -Iinclude \
+		-o $@ tests/test_lxfs.c tests/qemu_uart.c fs/lxfs.c
+
+check-qemu: tests/test_lxfs.avr.elf
+	sh tests/run-qemu.sh $(QEMU_AVR) $(QEMU_TIMEOUT) $<
+
 # HTML documentation in Documentation/output, as "make htmldocs" in Linux.
 # Missing Sphinx only skips the docs; the firmware build does not need it.
 SPHINXBUILD ?= sphinx-build
@@ -252,5 +267,5 @@ cleandocs:
 
 -include $(OBJS:.o=.d)
 
-.PHONY: all disasm size flash fuses clean mrproper coreutils check htmldocs \
+.PHONY: all disasm size flash fuses clean mrproper coreutils check check-qemu htmldocs \
 	cleandocs $(config-targets)
