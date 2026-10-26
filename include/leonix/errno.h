@@ -18,6 +18,5 @@
 #define ENOSPC		28
 #define EROFS		30
 #define ENAMETOOLONG	36
-#define ENOSYS		38
 
 #endif /* _LEONIX_ERRNO_H */

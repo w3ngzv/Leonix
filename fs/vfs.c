@@ -14,6 +14,7 @@
 #include <stddef.h>
 #include <string.h>
 
+#include <leonix/array_size.h>
 #include <leonix/procfs.h>
 #include <leonix/romfs.h>
 #include <leonix/errno.h>
@@ -33,7 +34,7 @@ static const struct mount mounts[] = {
 	{ root_path, lxfs_open, lxfs_unlink },	/* last */
 };
 
-#define NR_MOUNTS	(sizeof(mounts) / sizeof(mounts[0]))
+#define NR_MOUNTS	ARRAY_SIZE(mounts)
 
 static struct file files[MAX_FDS];
 

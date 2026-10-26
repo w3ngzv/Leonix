@@ -8,6 +8,6 @@
  * Leonix has no module loader, so every driver is built in and
  * module_init() is the device initcall, as in Linux with MODULE unset.
  */
-#define module_init(x)	__initcall(x);
+#define module_init(x)	__initcall(x)
 
 #endif /* _LEONIX_MODULE_H */
