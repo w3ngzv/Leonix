@@ -159,6 +159,46 @@ ST-TN1433-rev7.pdf
 
   https://www.st.com.cn/resource/en/technical_note/tn1433-reference-device-marking-schematics-for-stm32-microcontrollers-and-microprocessors-stmicroelectronics.pdf
 
+STM32F103x4x6-datasheet-DocID15060-rev7.pdf
+  STMicroelectronics, STM32F103x4, STM32F103x6 低容量数据手册, DocID15060
+  Rev 7, 2015 年 6 月. 表 2 给出 C4、C6 的 Flash (16、32 KB) 与 SRAM
+  (6、10 KB), 以及只有两个通用定时器与两个 USART; 第 7 节订货代码中
+  4 为 16 KB, 6 为 32 KB. 文件中只有 DocID, 没有 DSxxxx 形式的编号.
+  st.com 与 st.com.cn 对脚本请求无响应, 2026-10-26 取自 Internet Archive.
+  现行修订版未取得. SHA-256
+  31ab1fe3de6e6cf3e97ce9a2329794edc012d7e6ec52f8a69af672562d8363cd.
+
+  https://www.st.com/resource/en/datasheet/stm32f103c6.pdf
+
+stm32f1xx-hal-driver-v1.1.10/
+  STMicroelectronics, STM32CubeF1 HAL 驱动 V1.1.10 (2024-07-22) 中的
+  stm32f1xx_hal_crc.c、stm32f1xx_hal_crc.h、stm32f1xx_hal_rcc.h, 以及
+  Release_Notes.html 与 LICENSE.md (BSD 3-Clause). HAL_CRC_Calculate()
+  先以 __HAL_CRC_DR_RESET() 置 CR 的 RESET 位, 再逐字写入 DR;
+  __HAL_RCC_xxx_CLK_ENABLE() 写入时钟使能位之后读回一次, 注释为 "Delay
+  after an RCC peripheral clock enabling". Documentation/stm32f103.rst 的
+  CRC 一节与 tests/stm32/crcreset.c 以此为对照. 2026-10-26 取自 GitHub
+  标签 v1.1.10. SHA-256:
+
+  - stm32f1xx_hal_crc.c
+    632731cf473ad8d280d5370b07dcaac1ddd69a77218628a59eb2debad7365374
+  - stm32f1xx_hal_crc.h
+    e2af098d3c779777dbe668b6cf51ae0d130e6fd49872b926d4767c8587c86337
+  - stm32f1xx_hal_rcc.h
+    8bf099bedb0c4fa035df81520f99e289464293b27e71d7e8759c8d5160ce8ac1
+
+  https://github.com/STMicroelectronics/stm32f1xx-hal-driver/tree/v1.1.10
+
+下列 ST 文档与 STM32F103 的板级设计有关, 2026-10-26 未能取得: st.com 与
+st.com.cn 对脚本请求无响应. Documentation/stm32f103.rst 不引用这些文档.
+
+  AN2586 Getting started with STM32F10xxx hardware development (电源、
+  复位、BOOT 引脚与调试接口的参考设计); AN2606 STM32 microcontroller
+  system memory boot mode (内置 bootloader 的协议与引脚); AN2868
+  STM32F10xxx internal RC oscillator (HSI) calibration (DS5319 表 24 的
+  注 2 指向该文档); UM1075 ST-LINK/V2 in-circuit debugger/programmer
+  (原厂 ST-LINK/V2 的接口); RM0008 的现行修订版 Rev 21.
+
 Arm-CoreSight-IHI0029F.pdf
   Arm, CoreSight Architecture Specification v3.0, ARM IHI 0029F, 2022 年
   2 月. B2.2 节规定 PIDR 中 JEP106 代码的位置: DES_0 为 PIDR1[7:4],
@@ -290,3 +330,17 @@ LUFA-111009
   USBController_AVR8.h 与 USBInterrupt_AVR8.c.
 
   https://github.com/abcminiuser/lufa/tree/LUFA-111009
+
+QEMU 11.1.2 的 stm32vldiscovery
+  qemu-project/qemu 仓库 v11.1.2 标签下的 docs/system/arm/stm32.rst 与
+  hw/arm/stm32f100_soc.c, 2026-10-26 读取, SHA-256 分别为
+  1d75130bf0a21de178b70d4c1fc2159a132829a56e152592a8306597a2638157 与
+  0e708cafe1ddf26f6a6261a9512c9131bb603371c06f0ab761fa17c1473fcb44.
+  前者称该机型的芯片为 STM32F100RBT6. 后者把三个 USART 与两个 SPI 建成
+  实际的设备, 其余外设 (定时器、RTC、BKP、PWR、GPIO、ADC、DMA、CRC、
+  RCC 等) 均由 create_unimplemented_device() 建成占位区域; 文档的
+  "Supported devices" 一节所列的 ADC 与定时器对该机型并不成立.
+  tests/stm32 与 Documentation/stm32f103.rst 依此划分哪些检查能在 QEMU
+  中运行.
+
+  https://gitlab.com/qemu-project/qemu/-/blob/v11.1.2/hw/arm/stm32f100_soc.c
