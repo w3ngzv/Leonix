@@ -568,18 +568,96 @@ PA9, 各引脚输出的信号见 tests/stm32/signal.c 开头的注释. 这三个
 5 V 电平会加到被测引脚上.
 
 
+与 ST 文档对照
+==============
+
+**与 ST 文档对照** 是把一块 STM32F103C8T6 或 C6T6 的丝印、标识寄存器
+与运行结果逐项同 ST 文档比较的检查. 该检查回答的是 "这块芯片与 ST 文档
+是否一致", 不能回答 "这块芯片是否为 ST 原厂产品": ST 的文档没有给出认定
+原厂芯片的方法, 而兼容芯片可以读出与 ST 相同的标识. 二手资料 Bluepill
+Diagnostics v1.640 列出的 CKS32F103C8T6 与 APM32F103xC, DEV_ID 与 REV_ID
+都与原厂的 0x410、0x2003 相同. "不符" 说明芯片在该项上偏离 ST 文档; 全部
+"相符" 只说明没有发现偏离. 可靠的来源仍然是 ST 的授权渠道.
+
+两种型号的差别 (DS5319 与 DocID15060 第 7 节、表 2, DEV_ID 见 RM0008
+31.6.1):
+
+- C8T6: 中容量器件, 64 KB Flash, 20 KB SRAM, DEV_ID 0x410.
+- C6T6: 小容量器件, 32 KB Flash, 10 KB SRAM, DEV_ID 0x412. 只有 TIM2、
+  TIM3 两个通用定时器和 USART1、USART2 两个 USART, PB10 上没有 USART3.
+
+丝印
+----
+
+记下芯片上的全部文字. TN1433 4.3 节图 6 给出 LQFP48 丝印的示例: 型号
+(Product identification) 之外, 另有标为 Y WW 的日期码与修订码; 文字正放时,
+第 1 脚位于左下角. 中容量器件的修订码按 ES096 表 2 对应到 REV_ID, 例如 Y
+对应 0x2003.
+
+标识寄存器
+----------
+
+接好 ST-LINK 之后运行, ``--marking`` 填丝印上的型号, ``--revision`` 填
+修订码::
+
+  python3 tests/stm32/identify.py --marking STM32F103C8T6 --revision Y
+
+脚本只读取, 不暂停、不复位、不写入芯片. 每一行给出读数与文档规定的值:
+
+- CPUID: PM0056 4.4.2 规定 STM32F1 为 0x411FC231 (Cortex-M3 r1p1).
+- DEV_ID 与 REV_ID: 取自 DBGMCU_IDCODE, 按 RM0008 31.6.1 对照容量等级
+  与修订号. 读数为 0 时脚本不作比较, 见 ES096 2.2.2.
+- revision code: 丝印修订码与 REV_ID 是否对应 (ES096 表 2). 小容量
+  器件的勘误表未取得, 该项只记录.
+- F_SIZE: Flash 容量寄存器 (RM0008 30.1.1) 与丝印型号的容量是否相同.
+- ROM table: ROM 表中的 JEP106 厂商代码, 第一组 0x20 为 SGS/Thomson,
+  即 ST 的前身 (JEP106AB).
+- U_ID: 96 位唯一 ID (RM0008 30.2), 文档没有规定其结构, 只记录.
+
+SW-DP 的 DPIDR 经 OpenOCD 的 ST-LINK 传输无法读取. 用 Leonix 的
+/dev/swd 时会输出该值, RM0008 31.8.3 规定为 0x1BA01477, 这是 Arm 的默认
+值, 不区分厂商.
+
+运行检查
+--------
+
+标识之外, 运行 "在板上运行" 一节的 isa.elf 与 periph.elf. 指令检查对照的
+是 Cortex-M3 的指令集, 外设检查对照的是 RM0008 与 DS5319 的规定. C6T6
+上 periph.elf 与 usartidle.elf 中 USART3 的各行, 以及 signal_check.py 的
+``--pin PB6`` (TIM4), 对应的外设不存在, 不能作为判断依据. 外设检查的
+界限取自中容量的 DS5319, 用于 C6T6 时应改为对照 DocID15060 中对应的
+表格.
+
+作者的板子
+----------
+
+作者的板子丝印为 STM32F103C8T6, 2026-10-26 的 identify.py 输出为::
+
+  matches  CPUID          0x411fc231   PM0056 4.4.2: 0x411fc231, Cortex-M3 r1p1
+  matches  DEV_ID         0x410        RM0008 31.6.1: 0x410 for medium density
+  matches  REV_ID         0x0000       RM0008 31.6.1: revision A
+  differs  F_SIZE         128 KiB      DS5319 Rev 20 section 7: 64 KiB
+  matches  ROM table      JEP106 0/0x20 JEP106AB: bank 1 code 0x20 is SGS/Thomson (ST)
+
+isa.elf 与 periph.elf 全部通过. F_SIZE 读出 128 KB, 与丝印 C8 的 64 KB
+不符; 128 KB 之上另有 12 KB 可以擦写的 Flash, 不在 RM0008 的 Flash 组织
+之内. 这两项说明该芯片与 ST 文档不一致, 但文档无法据此断定其来源.
+
+
 征集对照数据
 ============
 
-本项目作者的板子与 ST 文档有几处不一致: Flash 容量寄存器读出 128 KB, 而
-丝印 C8 对应 64 KB (DS5319 第 7 节); REV_ID 为 0; 128 KB 之上另有 12 KB
-可以擦写的 Flash. 这块板子的芯片是否为 ST 原厂产品, 依据现有文档无法确认,
-因此在这块板子上观察到的、文档没有规定的行为, 也无法确认原厂芯片是否相同.
+本项目作者的板子与 ST 文档有两处不一致 (见 "与 ST 文档对照" 一节): Flash
+容量寄存器读出 128 KB, 而丝印 C8 对应 64 KB (DS5319 第 7 节); 128 KB 之上
+另有 12 KB 可以擦写的 Flash. REV_ID 为 0x0000, 即修订版 A, 是 ES096 表 2
+所列的值; 丝印上的修订码尚未核对. 这块板子的芯片是否为 ST 原厂产品,
+依据现有文档无法确认, 因此在这块板子上观察到的、文档没有规定的行为, 也
+无法确认原厂芯片是否相同.
 本节列出其中两项. 最有价值的对照来自从 ST 授权渠道购得、能够确认为原厂
 芯片的板子.
 
 如果手上有 STM32F103 的板子, 欢迎运行下列命令, 把完整输出连同板子的购买
-渠道、芯片丝印 (含底行的日期码与修订码) 以及 DBGMCU_IDCODE 的读数, 经
+渠道、芯片丝印 (含日期码与修订码) 以及 identify.py 的输出, 经
 CONTRIBUTING.zh_CN 所列的 GitHub 仓库提供给作者. 原厂芯片的结果若与作者
 的相同, 该现象即属于芯片本身的行为, 本节会改写为对该行为的说明.
 
