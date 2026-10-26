@@ -37,7 +37,7 @@ config-targets := config menuconfig nconfig oldconfig olddefconfig \
 	defconfig %_defconfig savedefconfig allyesconfig allnoconfig \
 	alldefconfig listnewconfig syncconfig
 no-dot-config-targets := $(config-targets) clean mrproper check \
-	htmldocs cleandocs
+	check-stm32 stm32-tests htmldocs cleandocs
 
 need-config := 1
 ifneq ($(MAKECMDGOALS),)
@@ -237,7 +237,8 @@ mrproper: clean
 # 与 Linux 的 clean 一样按目录删除, 已关闭选项的目标文件也被删除
 clean:
 	rm -f $(foreach d,$(kbuild-dirs),$(d)/*.o $(d)/*.d) $(TARGET).elf $(TARGET).hex $(TARGET).map $(TEST_BIN) \
-		$(TEST_VM_PROGS) fs/romfs_image.c tests/test_lxfs.avr.elf
+		$(TEST_VM_PROGS) fs/romfs_image.c tests/test_lxfs.avr.elf \
+		$(STM32_TESTS)
 
 # host tests of the code that has no AVR dependency; 不依赖 AVR 的代码的主机测试
 HOSTCC ?= cc
@@ -290,6 +291,33 @@ tests/test_lxfs.avr.elf: tests/test_lxfs.c tests/qemu_uart.c fs/lxfs.c \
 check-qemu: tests/test_lxfs.avr.elf
 	sh tests/run-qemu.sh $(QEMU_AVR) $(QEMU_TIMEOUT) $<
 
+# Test programs for an STM32F103 board, see tests/stm32/stm32test.py.
+# check-stm32 runs the instruction checks on qemu-system-arm's
+# stm32vldiscovery and needs no board; stm32test.py --stlink and
+# signal_check.py run them on one.
+#
+# STM32F103 板的测试程序, 见 tests/stm32/stm32test.py. check-stm32 在
+# qemu-system-arm 的 stm32vldiscovery 上运行指令检查, 不需要板子; 在板上运行
+# 用 stm32test.py --stlink 与 signal_check.py.
+ARM_CC ?= arm-none-eabi-gcc
+QEMU_ARM ?= qemu-system-arm
+STM32_CFLAGS := -mcpu=cortex-m3 -mthumb -O2 -std=gnu11 -ffreestanding \
+	-nostdlib -Wall -Wextra -Werror
+STM32_TESTS := tests/stm32/isa.elf tests/stm32/periph.elf tests/stm32/signal.elf \
+	tests/stm32/crcreset.elf tests/stm32/usartidle.elf
+
+tests/stm32/%.elf: tests/stm32/%.c tests/stm32/runtime.c tests/stm32/runtime.h \
+		tests/stm32/stm32.ld
+	$(ARM_CC) $(STM32_CFLAGS) -T tests/stm32/stm32.ld -Wl,-e,reset_handler \
+		-o $@ $(filter %.c %.S,$^)
+
+tests/stm32/isa.elf: tests/stm32/isa_leaf.S tests/stm32/isa.h
+
+stm32-tests: $(STM32_TESTS)
+
+check-stm32: tests/stm32/isa.elf
+	$(PYTHON) tests/stm32/stm32test.py --qemu --qemu-bin $(QEMU_ARM) $<
+
 # HTML documentation in Documentation/output, as "make htmldocs" in Linux.
 # Missing Sphinx only skips the docs; the firmware build does not need it.
 #
@@ -310,4 +338,4 @@ cleandocs:
 -include $(OBJS:.o=.d)
 
 .PHONY: all disasm size flash fuses clean mrproper coreutils check check-qemu htmldocs \
-	cleandocs $(config-targets)
+	cleandocs check-stm32 stm32-tests $(config-targets)
