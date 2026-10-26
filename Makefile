@@ -304,7 +304,7 @@ QEMU_ARM ?= qemu-system-arm
 STM32_CFLAGS := -mcpu=cortex-m3 -mthumb -O2 -std=gnu11 -ffreestanding \
 	-nostdlib -Wall -Wextra -Werror
 STM32_TESTS := tests/stm32/isa.elf tests/stm32/periph.elf tests/stm32/signal.elf \
-	tests/stm32/crcreset.elf
+	tests/stm32/crcreset.elf tests/stm32/usartidle.elf
 
 tests/stm32/%.elf: tests/stm32/%.c tests/stm32/runtime.c tests/stm32/runtime.h \
 		tests/stm32/stm32.ld
