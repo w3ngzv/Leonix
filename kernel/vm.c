@@ -6,11 +6,24 @@
  * through vm_ops.fetch(), so a program costs the machine state and its
  * data memory alone.  The file has no AVR dependency, which lets
  * tests/test_vm.c run it on the host.
+ *
+ * 用户程序的解释器, 见 include/leonix/vm.h.
+ *
+ * 代码不复制进 SRAM: 每个字节都经由 vm_ops.fetch() 从文件中取出, 因此一个程序
+ * 只占用虚拟机状态与其数据内存. 本文件不依赖 AVR, tests/test_vm.c 因此可以在主
+ * 机上运行该解释器.
  */
 #include <string.h>
 
 #include <leonix/vm.h>
 
+/**
+ * vm_push() - push a cell onto the data stack
+ * @vm: the machine
+ * @value: the cell
+ *
+ * 把 @value 压入数据栈. 栈满时把 vm->fault 设为 VM_STACK.
+ */
 void vm_push(struct vm *vm, int16_t value)
 {
 	if (vm->sp == VM_DSTACK) {
@@ -20,6 +33,15 @@ void vm_push(struct vm *vm, int16_t value)
 	vm->ds[vm->sp++] = value;
 }
 
+/**
+ * vm_pop() - pop a cell off the data stack
+ * @vm: the machine
+ *
+ * 从数据栈弹出一个单元. 栈空时把 vm->fault 设为 VM_STACK.
+ *
+ * Return: the cell, or 0 with vm->fault set to VM_STACK.
+ * 返回弹出的单元; 栈空时返回 0.
+ */
 int16_t vm_pop(struct vm *vm)
 {
 	if (!vm->sp) {
@@ -29,7 +51,16 @@ int16_t vm_pop(struct vm *vm)
 	return vm->ds[--vm->sp];
 }
 
-/* A byte of code or data at machine address @addr, or -1 out of bounds. */
+/**
+ * vm_load_byte() - read a byte of code or data
+ * @vm: the machine
+ * @addr: machine address
+ *
+ * 读取虚拟机地址 @addr 处的代码或数据字节.
+ *
+ * Return: the byte, or -1 out of bounds.
+ * 返回该字节; 越界时返回 -1.
+ */
 int16_t vm_load_byte(struct vm *vm, uint16_t addr)
 {
 	if (addr >= VM_DATA_BASE) {
@@ -41,7 +72,10 @@ int16_t vm_load_byte(struct vm *vm, uint16_t addr)
 	return vm->ops->fetch(vm, VM_HEADER + addr);
 }
 
-/* Returns 0, or -1 for an address outside the data memory. */
+/*
+ * store @value at @addr: 0, or -1 outside the data memory
+ * 把 @value 存到 @addr: 成功时返回 0, 地址在数据内存之外时返回 -1
+ */
 static int vm_store_byte(struct vm *vm, uint16_t addr, uint8_t value)
 {
 	if (addr < VM_DATA_BASE || addr - VM_DATA_BASE >= vm->data_len)
@@ -50,7 +84,10 @@ static int vm_store_byte(struct vm *vm, uint16_t addr, uint8_t value)
 	return 0;
 }
 
-/* The next code byte, faulting past the end of the code. */
+/*
+ * the next code byte, faulting past the end of the code
+ * 下一个代码字节; 越过代码末尾时置故障
+ */
 static uint8_t next(struct vm *vm)
 {
 	int16_t b = vm->pc < vm->code_len ?
@@ -107,10 +144,17 @@ static uint16_t rpop(struct vm *vm)
 	return vm->rs[--vm->rsp];
 }
 
-/*
- * Check the header of a program @file_len bytes long and set the machine
- * up to run it from its first instruction.  Returns 0, or -1 for a file
- * that is not a program or wants more data memory than there is.
+/**
+ * vm_load() - check a program's header and set the machine up to run it
+ * @vm: the machine, with vm->ops set
+ * @file_len: bytes in the program's file
+ *
+ * 检查长度为 @file_len 字节的程序的文件头, 并使虚拟机从程序的第一条指令开始运
+ * 行.
+ *
+ * Return: 0, or -1 for a file that is not a program or wants more data
+ * memory than there is.
+ * 成功时返回 0; 文件不是程序或所需数据内存超出容量时返回 -1.
  */
 int vm_load(struct vm *vm, uint16_t file_len)
 {
@@ -139,11 +183,21 @@ int vm_load(struct vm *vm, uint16_t file_len)
 	return 0;
 }
 
-/*
- * Copy the argument strings and an argv array to the end of the data
- * memory, as the kernel lays them on the stack of a new process in
- * Linux, and push argc and argv for the program's first instruction.
- * Returns 0, or -1 if they do not fit.
+/**
+ * vm_args() - give a loaded program its arguments
+ * @vm: the machine, after vm_load()
+ * @argc: entries in @argv before the NULL
+ * @argv: the strings
+ *
+ * The strings and an argv array go at the end of the data memory, as
+ * Linux lays them on a new process's stack; argc and argv are pushed for
+ * the program's first instruction.
+ *
+ * 把参数字符串与 argv 数组复制到数据内存末尾, 与 Linux 把参数布置在新进程栈上的
+ * 做法相同; 再压入 argc 与 argv, 供程序的第一条指令使用.
+ *
+ * Return: 0, or -1 if they do not fit.
+ * 成功时返回 0, 放不下时返回 -1.
  */
 int vm_args(struct vm *vm, int argc, const char *const argv[])
 {
@@ -173,9 +227,15 @@ int vm_args(struct vm *vm, int argc, const char *const argv[])
 	return 0;
 }
 
-/*
- * Run until the program exits or faults.  Returns VM_OK after exit(),
- * with the status in vm->status, or the fault.
+/**
+ * vm_run() - run a program until it exits or faults
+ * @vm: the machine, after vm_load() and vm_args()
+ *
+ * 运行程序, 直到程序退出或出错.
+ *
+ * Return: VM_OK after exit(), with the status in vm->status, or the
+ * fault.
+ * 程序调用 exit() 后返回 VM_OK, 退出状态在 vm->status 中; 出错时返回故障号.
  */
 uint8_t vm_run(struct vm *vm)
 {
@@ -223,7 +283,7 @@ uint8_t vm_run(struct vm *vm)
 			vm_push(vm, b);
 			vm_push(vm, target);
 			break;
-		case OP_PICK:			/* 0 pick is dup */
+		case OP_PICK:			/* 0 pick is dup; 等同 dup */
 			r = next(vm);
 			if (r >= vm->sp)
 				vm->fault = VM_STACK;
@@ -280,7 +340,8 @@ uint8_t vm_run(struct vm *vm)
 			}
 			vm_push(vm, a);
 			break;
-		case OP_MULDIV:			/* Forth's star-slash */
+		/* Forth's star-slash; 即 Forth 的 star-slash 运算 */
+		case OP_MULDIV:
 			target = vm_pop(vm);
 			b = vm_pop(vm);
 			a = vm_pop(vm);

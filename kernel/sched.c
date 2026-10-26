@@ -6,6 +6,10 @@
  * whichever comes first.  A sleeping task is skipped until its wake-up
  * time; when every task sleeps, the idle task puts the CPU into Idle
  * mode until the next interrupt.
+ *
+ * 带睡眠的轮转调度器. 任务一直运行到下一个节拍或调用 sleep_until(), 以先到者为
+ * 准. 睡眠的任务在唤醒时间之前被跳过; 所有任务都在睡眠时, 空闲任务使 CPU 进入
+ * Idle 模式, 直到下一个中断.
  */
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
@@ -16,30 +20,42 @@
 #include <leonix/sched.h>
 #include <leonix/wait.h>
 
-/* Number of registers r1..r31 in the frame below r0 and SREG. */
+/*
+ * r1..r31, saved below r0 and SREG in the frame
+ * 栈帧中保存在 r0 与 SREG 之下的 r1..r31
+ */
 #define NR_SAVED_GPRS	31
 
 /*
  * Written at the lowest two bytes of every stack.  The stack grows down,
  * so these are the last bytes an overflow reaches before it leaves the
  * stack.  The value is the top half of Linux's STACK_END_MAGIC.
+ *
+ * 写在每个栈最低的两个字节. 栈向下增长, 溢出在越出栈之前最后到达的就是这两个字
+ * 节. 取值为 Linux STACK_END_MAGIC 的高半部分.
  */
 #define STACK_CANARY_LO	0xac
 #define STACK_CANARY_HI	0x57
 
 /*
- * Every stack byte above the canary starts out as STACK_FILL, so the
- * lowest byte that no longer holds it marks the deepest the stack has
- * been.  0x00 would be the obvious value, but the switch frame pushes
- * r1, which is always 0, and many registers are 0 as well; 0xa5 is
- * rarer, though a pushed 0xa5 can still make the count err high.
+ * Every stack byte above the canary starts as STACK_FILL, so the lowest
+ * byte that no longer holds it marks the deepest the stack has been.  0
+ * would not do: the switch frame pushes r1, always 0, and many registers
+ * hold 0.  A pushed 0xa5 can still make the count err high.
+ *
+ * 金丝雀之上的每个栈字节初始为 STACK_FILL, 不再是该值的最低字节即栈曾到达的最
+ * 深处. 0 不适用: 切换栈帧压入恒为 0 的 r1, 许多寄存器的值也是 0. 压入的 0xa5
+ * 仍可能使计数偏高.
  */
 #define STACK_FILL	0xa5
 #define STACK_CANARY_SIZE	2
 
 #define IDLE_STACK_SIZE	72
 
-/* idle() itself needs task_exit()'s return address and a 2-byte frame. */
+/*
+ * idle() needs task_exit()'s return address and a 2-byte frame
+ * idle() 需要 task_exit() 的返回地址与 2 字节的栈帧
+ */
 _Static_assert(TASK_STACK_RESERVE + 4 <= IDLE_STACK_SIZE,
 	       "idle stack too small for the switch frame");
 
@@ -53,11 +69,12 @@ static uint32_t idle_ticks;
 
 struct task *current;
 
-
 /*
  * An entry function that returns lands here, see task_init().  The task
- * leaves the run queue for good; the others keep running.  Its stack is
- * never reused.
+ * leaves the run queue for good; its stack is never reused.
+ *
+ * 入口函数返回后到达此处, 见 task_init(). 该任务永久离开运行队列, 其栈不再被使
+ * 用.
  */
 static void task_exit(void)
 {
@@ -69,11 +86,15 @@ static void task_exit(void)
 
 /*
  * Lay out @stack so that the restore path in switch.S, followed by reti,
- * enters @entry with interrupts enabled.  From the top of the stack
- * down: the address of task_exit() as @entry's return address, @entry
- * itself as the address reti returns to, then r0, SREG and r1..r31.
- * The return addresses are stored high byte at the lower address, the
- * order CALL leaves them in.
+ * enters @entry with interrupts enabled.  From the top down: task_exit()
+ * as @entry's return address, @entry as the address reti returns to,
+ * then r0, SREG and r1..r31.  Return addresses are stored high byte at
+ * the lower address, as CALL leaves them.
+ *
+ * 布置 @stack, 使 switch.S 的恢复路径与随后的 reti 在中断打开的状态下进入
+ * @entry. 自栈顶向下依次为: 作为 @entry 返回地址的 task_exit(), 作为 reti 返回
+ * 地址的 @entry, 然后是 r0、SREG 与 r1..r31. 返回地址的高字节存放在低地址, 与
+ * CALL 指令留下的顺序相同.
  */
 static void task_init(struct task *t, void (*entry)(void),
 		      uint8_t *stack, uint16_t size)
@@ -93,13 +114,16 @@ static void task_init(struct task *t, void (*entry)(void),
 	*sp-- = entry_pc >> 8;
 	*sp-- = 0;			/* r0 */
 	/*
-	 * SREG with I clear, the same as every frame saved inside the
-	 * interrupt.  reti sets I itself.  Setting it here would enable
-	 * interrupts one pop early.
+	 * SREG with I clear, as in every frame saved inside the interrupt;
+	 * reti sets I.  Setting it here would enable interrupts one pop
+	 * early.
+	 *
+	 * SREG 的 I 位为 0, 与中断内保存的每个栈帧相同; reti 会置位 I. 在此置位
+	 * 会使中断提前一次出栈而打开.
 	 */
 	*sp-- = 0;
 	for (i = 0; i < NR_SAVED_GPRS; i++)
-		*sp-- = 0;		/* r1..r31, r1 must be zero for C */
+		*sp-- = 0;		/* r1..r31; C 要求 r1 为 0 */
 
 	stack[0] = STACK_CANARY_LO;
 	stack[1] = STACK_CANARY_HI;
@@ -109,15 +133,21 @@ static void task_init(struct task *t, void (*entry)(void),
 	t->state = TASK_RUNNABLE;
 }
 
-/*
- * Bytes above the canary of task @index's stack that have never been
- * written, or of the idle task's for SCHED_IDLE_TASK.  Returns
- * SCHED_NO_TASK for an index with no task.
+/**
+ * sched_stack_free() - stack bytes a task has never written
+ * @index: the task, or SCHED_IDLE_TASK
  *
- * The scan stops at the first byte that differs from STACK_FILL, at the
- * latest at the initial frame near the top.  It reads a stack that may
- * be in use, which is harmless: the result can only be a few bytes
+ * Counts from the canary up.  The scan stops at the first byte that
+ * differs from STACK_FILL, at the latest at the initial frame near the
+ * top.  It may read a stack in use, so the result can be a few bytes
  * stale.
+ *
+ * 任务 @index (SCHED_IDLE_TASK 表示空闲任务) 的栈中, 金丝雀之上从未被写过的字
+ * 节数. 扫描在第一个不等于 STACK_FILL 的字节处停止, 最迟停在栈顶附近的初始栈
+ * 帧. 扫描可能读到正在使用的栈, 结果因此可能滞后几个字节.
+ *
+ * Return: the byte count, or SCHED_NO_TASK for an index with no task.
+ * 返回字节数; 该编号没有任务时返回 SCHED_NO_TASK.
  */
 uint16_t sched_stack_free(uint8_t index)
 {
@@ -136,7 +166,16 @@ uint16_t sched_stack_free(uint8_t index)
 	return p - (t->stack + STACK_CANARY_SIZE);
 }
 
-/* The state of task @index, or SCHED_NO_STATE for an index with no task. */
+/**
+ * sched_task_state() - a task's state
+ * @index: the task
+ *
+ * 任务 @index 的状态.
+ *
+ * Return: an enum task_state, or SCHED_NO_STATE for an index with no
+ * task.
+ * 返回 enum task_state 中的值; 该编号没有任务时返回 SCHED_NO_STATE.
+ */
 uint8_t sched_task_state(uint8_t index)
 {
 	uint8_t state;
@@ -149,7 +188,20 @@ uint8_t sched_task_state(uint8_t index)
 	return state;
 }
 
-/* Returns 0, or -1 if the task table is full or @size is too small. */
+/**
+ * task_create() - add a task
+ * @entry: the function the task runs; its return ends the task
+ * @stack: the task's stack
+ * @size: bytes in @stack, at least TASK_STACK_RESERVE
+ *
+ * 添加一个运行 @entry 的任务, @entry 返回即结束该任务. @stack 是任务的栈, @size
+ * 是其字节数, 不得小于 TASK_STACK_RESERVE.
+ *
+ * Context: before sched_start().
+ * 在 sched_start() 之前调用.
+ * Return: 0, or -1 if the task table is full or @size is too small.
+ * 成功时返回 0, 任务表已满或 @size 过小时返回 -1.
+ */
 int task_create(void (*entry)(void), uint8_t *stack, uint16_t size)
 {
 	if (nr_tasks == MAX_TASKS || size < TASK_STACK_RESERVE)
@@ -164,6 +216,9 @@ int task_create(void (*entry)(void), uint8_t *stack, uint16_t size)
  * The outgoing task has just been saved on its own stack, so this is
  * the deepest that stack has been since the last check, give or take
  * what the task used and released in between.
+ *
+ * 切出的任务刚刚保存在自己的栈上, 因此此时是该栈自上次检查以来最深的时刻, 只差
+ * 任务在两次检查之间用过又释放的部分.
  */
 static void check_stack(const struct task *t)
 {
@@ -172,13 +227,19 @@ static void check_stack(const struct task *t)
 		      t == &idle_task ? PANIC_IDLE_TASK : t - tasks);
 }
 
-/*
- * Pick the next runnable task after the current one, waking any sleeper
+/**
+ * schedule() - pick the task to run next
+ *
+ * Picks the next runnable task after the current one, waking any sleeper
  * whose time has come on the way.  The current task is looked at last,
  * so it keeps the CPU only when no other task can run.
  *
- * Called with interrupts disabled, either from the tick or from
- * arch_yield(), with the outgoing task already saved.
+ * 选出当前任务之后的下一个可运行任务, 途中唤醒到期的睡眠任务. 当前任务最后才被
+ * 考虑, 因此只有在没有其他任务可运行时, 当前任务才继续占用 CPU.
+ *
+ * Context: interrupts disabled, from the tick or arch_yield(), with the
+ * outgoing task already saved.
+ * 由节拍中断或 arch_yield() 在关中断且切出的任务已保存的状态下调用.
  */
 void schedule(void)
 {
@@ -204,10 +265,18 @@ void schedule(void)
 	current = &idle_task;
 }
 
-/*
- * Called from the tick interrupt.  The tick lands on whichever task is
- * running at that instant, so counting the ticks that land on the idle
- * task samples how much of the time the CPU had nothing to do.
+/**
+ * scheduler_tick() - count an idle tick and reschedule
+ *
+ * The tick lands on whichever task is running at that instant, so the
+ * ticks that land on the idle task sample how much of the time the CPU
+ * had nothing to do.
+ *
+ * 节拍落在当时正在运行的任务上, 因此落在空闲任务上的节拍数是对 CPU 空闲时间的
+ * 抽样.
+ *
+ * Context: the tick interrupt.
+ * 在节拍中断中调用.
  */
 void scheduler_tick(void)
 {
@@ -216,7 +285,12 @@ void scheduler_tick(void)
 	schedule();
 }
 
-/* Ticks that found the CPU idle since sched_start(). */
+/**
+ * sched_idle_ticks() - ticks that found the CPU idle
+ *
+ * Return: the count since sched_start().
+ * 返回 sched_start() 以来 CPU 空闲的节拍数.
+ */
 uint32_t sched_idle_ticks(void)
 {
 	uint32_t ticks;
@@ -227,14 +301,21 @@ uint32_t sched_idle_ticks(void)
 	return ticks;
 }
 
-/*
- * Sleep until jiffies reaches @deadline.  An absolute deadline lets a
- * periodic task add its period each round without drifting.
+/**
+ * sleep_until() - sleep until a tick count
+ * @deadline: jiffies to wake at
  *
- * Interrupts are disabled while the task is marked, so the tick cannot
- * see a half-written wake_at.  The call returns with interrupts enabled
+ * An absolute deadline lets a periodic task add its period each round
+ * without drifting.  Interrupts are off while the task is marked, so the
+ * tick cannot see a half-written wake_at.
+ *
+ * 睡眠到 jiffies 达到 @deadline. 采用绝对时刻, 周期任务每轮加上周期即可, 不会
+ * 漂移. 标记任务期间关中断, 节拍中断因此不会看到写了一半的 wake_at.
+ *
+ * Context: a task, after sched_start().  Returns with interrupts enabled
  * whatever the caller had, since arch_yield() returns through reti.
- * Only a task may call it, after sched_start().
+ * 在 sched_start() 之后由任务调用. 无论调用者原先的状态如何, 返回时中断都已打
+ * 开, 因为 arch_yield() 经由 reti 返回.
  */
 void sleep_until(uint32_t deadline)
 {
@@ -244,15 +325,28 @@ void sleep_until(uint32_t deadline)
 	arch_yield();
 }
 
-/*
- * Put the current task on @wq and give up the CPU; the caller has
- * disabled interrupts and found its condition false.  With @timed the
- * task also wakes once jiffies reaches @deadline.  Returns with
- * interrupts enabled and the task off @wq, since a later wake_up() on
- * @wq must not end some other sleep of this task.
- */
 _Static_assert(MAX_TASKS <= 8, "struct wait_queue holds one bit per task in a byte");
 
+/**
+ * __wait() - wait on a queue
+ * @wq: the queue
+ * @deadline: jiffies to give up at, if @timed
+ * @timed: whether @deadline applies
+ *
+ * Puts the current task on @wq and gives up the CPU.  The task leaves
+ * @wq before returning, since a later wake_up() on @wq must not end some
+ * other sleep of this task.
+ *
+ * 把当前任务放入 @wq 并让出 CPU; @timed 为真时, jiffies 达到 @deadline 也会唤醒
+ * 该任务. 返回之前任务离开 @wq, 因为之后对 @wq 的 wake_up() 不应结束该任务的其
+ * 他睡眠.
+ *
+ * Context: wait_event() and wait_event_timeout(), with interrupts
+ * disabled and the condition found false.  Returns with interrupts
+ * enabled.
+ * 由 wait_event() 与 wait_event_timeout() 在关中断且条件不成立时调用. 返回时中
+ * 断已打开.
+ */
 void __wait(struct wait_queue *wq, uint32_t deadline, uint8_t timed)
 {
 	uint8_t bit = 1 << current_index;
@@ -267,11 +361,21 @@ void __wait(struct wait_queue *wq, uint32_t deadline, uint8_t timed)
 	sei();
 }
 
-/*
- * Make every task waiting on @wq runnable.  Callable from a task or an
- * interrupt handler.  A task already woken by its deadline has left
- * TASK_SLEEPING and is not touched.  Returns the number of tasks woken,
- * so an interrupt handler can tell whether a switch is worth making.
+/**
+ * wake_up() - make every task on a queue runnable
+ * @wq: the queue
+ *
+ * A task already woken by its deadline has left TASK_SLEEPING and is not
+ * touched.
+ *
+ * 使 @wq 上的每个任务变为可运行. 已因到期而唤醒的任务已离开 TASK_SLEEPING, 不受
+ * 影响.
+ *
+ * Context: a task or an interrupt handler.
+ * 任务或中断处理程序.
+ * Return: the number of tasks woken, by which an interrupt handler can
+ * tell whether a switch is worth making.
+ * 返回被唤醒的任务数, 中断处理程序据此判断是否值得切换任务.
  */
 uint8_t wake_up(struct wait_queue *wq)
 {
@@ -293,9 +397,16 @@ uint8_t wake_up(struct wait_queue *wq)
 	return woken;
 }
 
-/*
- * Sleep for at least @ms milliseconds.  The current tick may be about
- * to end, so one more is added.
+/**
+ * msleep() - sleep for at least a number of milliseconds
+ * @ms: milliseconds
+ *
+ * The current tick may be about to end, so one more is added.
+ *
+ * 睡眠至少 @ms 毫秒. 当前节拍可能即将结束, 因此多加一个节拍.
+ *
+ * Context: a task, after sched_start().
+ * 在 sched_start() 之后由任务调用.
  */
 void msleep(uint16_t ms)
 {
@@ -306,6 +417,10 @@ void msleep(uint16_t ms)
  * Runs only when every other task sleeps or is dead.  In Idle mode the
  * CPU stops but Timer1 keeps counting (datasheet 7.1), and the next tick
  * wakes it into the interrupt that may switch to a woken task.
+ *
+ * 只在其他所有任务都在睡眠或已结束时运行. Idle 模式下 CPU 停止而 Timer1 继续计
+ * 数 (数据手册 7.1), 下一个节拍把 CPU 唤醒并进入中断, 该中断可能切换到被唤醒的
+ * 任务.
  */
 static void idle(void)
 {
@@ -313,9 +428,15 @@ static void idle(void)
 		sleep_mode();
 }
 
-/*
- * Leaves the boot stack behind for good: main() never runs again once
- * the first task is entered.
+/**
+ * sched_start() - start the first task
+ *
+ * Leaves the boot stack for good: main() never runs again.
+ *
+ * 启动第一个任务. 从此离开启动栈, main() 不再运行.
+ *
+ * Context: main(), once.
+ * 由 main() 调用一次.
  */
 void sched_start(void)
 {

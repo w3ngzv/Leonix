@@ -10,10 +10,22 @@
  * Anything else in a conversion is copied as it is.
  *
  * Output is cut at @size - 1 characters and always terminated.
+ *
+ * 小型格式化函数, 代替 avr-libc 的 vfprintf.
+ *
+ * 支持的转换: %c %s %S %d %u %x %%. %S 取 flash 中的字符串. 可选的 0 标志
+ * 与宽度在左侧以零或空格填充数字与字符串, 加 - 则在右侧以空格填充; 宽度为
+ * * 时与 C 相同, 取自一个 int 参数. d、u、x 之前的 l 取 32 位参数, 因为此处
+ * int 为 16 位. 转换中的其他字符原样复制.
+ *
+ * 输出在 @size - 1 个字符处截断, 并且总有结束符.
  */
 #include <leonix/kernel.h>
 
-/* uint32_t has at most 10 decimal digits, 8 hex digits. */
+/*
+ * decimal digits in UINT32_MAX; hex needs 8
+ * UINT32_MAX 的十进制位数; 十六进制只需 8 位
+ */
 #define MAX_DIGITS	10
 
 struct out {
@@ -33,7 +45,6 @@ static void pad(struct out *o, char c, uint8_t n)
 		put(o, c);
 }
 
-/* Digits are produced from the right, as in lcd_put_right() before. */
 static void put_number(struct out *o, uint32_t v, uint8_t base, int neg,
 		       uint8_t width, char padc, int left)
 {
@@ -81,9 +92,18 @@ static void put_string(struct out *o, const char *s, int in_flash,
 		pad(o, ' ', width - len);
 }
 
-/*
- * Format @fmt, a string in flash, into @buf of @size bytes.  Returns the
- * number of characters stored, not counting the terminator.
+/**
+ * vsnprintk_P() - format into a buffer
+ * @buf: where to store the text
+ * @size: bytes in @buf, the terminator included
+ * @fmt: format, a string in flash
+ * @ap: arguments for @fmt
+ *
+ * 按 flash 中的格式串 @fmt 与参数 @ap 格式化到 @buf, @size 是 @buf 的字节数
+ * (含结束符).
+ *
+ * Return: characters stored, not counting the terminator.
+ * 写入的字符数, 不含结束符.
  */
 uint8_t vsnprintk_P(char *buf, uint8_t size, const char *fmt, va_list ap)
 {
@@ -164,6 +184,21 @@ uint8_t vsnprintk_P(char *buf, uint8_t size, const char *fmt, va_list ap)
 	return o.p - buf;
 }
 
+/**
+ * snprintk_P() - format into a buffer
+ * @buf: where to store the text
+ * @size: bytes in @buf, the terminator included
+ * @fmt: format, a string in flash
+ * @...: arguments for @fmt
+ *
+ * Called through snprintk(), which puts the literal in flash.
+ *
+ * 与 vsnprintk_P() 相同, 参数以可变参数传入. 经由 snprintk() 调用,
+ * snprintk() 把字面量放在 flash 中.
+ *
+ * Return: characters stored, not counting the terminator.
+ * 写入的字符数, 不含结束符.
+ */
 uint8_t snprintk_P(char *buf, uint8_t size, const char *fmt, ...)
 {
 	va_list ap;
