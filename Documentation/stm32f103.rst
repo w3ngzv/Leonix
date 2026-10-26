@@ -94,6 +94,15 @@ tests/stm32/stm32.ld 把该数组放在 Flash 的起始处.
 系统存储器中的 bootloader 经 USART1 重新编程 Flash (RM0008 3.4 节
 "Embedded boot loader"). 本项目经 SWD 烧录, 不使用该 bootloader.
 
+RM0008 7.1.1 规定系统复位把寄存器恢复为复位值, 没有提到 SRAM. 2026-10-26
+在本项目的板子上, 经 OpenOCD 的 ``reset`` 复位之后, SRAM 保留了前一个程序
+写入的内容. C 语言要求未初始化的全局变量与静态变量 (位于 .bss 段) 初值为 0,
+没有 C 运行库的启动代码时, 这项工作由复位处理程序完成:
+tests/stm32/runtime.c 的 reset_handler() 在调用 suite_main() 之前清零 .bss,
+边界 __bss_start 与 __bss_end 由 tests/stm32/stm32.ld 给出. QEMU 启动时
+SRAM 全为 0, 遗漏清零的程序在 QEMU 中不会出错, 在板上才会出错. 下文的 hello
+程序没有 .bss, 因此不需要清零.
+
 
 时钟
 ====
@@ -526,8 +535,18 @@ isa.c 尚未检查 SXTB. 下面以 SXTB 为例, 说明增加一项指令检查�
 外设检查读取 PB12 至 PB15 的上拉与下拉电阻, 这四个引脚不得连接任何
 东西. ADC 一项以内部参考电压估算 VDDA, 与 ST-LINK 测得的电压比较.
 
-频率检查另需运行 Leonix 的 Leonardo 作为频率计. 把被测引脚接到 Leonardo
-的 D13, 两块板的 GND 相连, Leonardo 的 D8 与 D9 断开, 然后运行::
+在本项目的板子上, 外设检查目前固定有两项失败: USART2 半双工回显的前两个
+字节, 0x00 带帧错误, 0x55 收为 0xD5, 其后三个字节正确. USART1 与 USART3
+运行同一段代码, 结果正确; 把 USART2 的设置单独写成程序时, 12 个字节全部
+正确. 原因尚未查清. 该检查把 TX 引脚设为复用推挽, 而 RM0008 27.3.10 要求
+半双工的 TX 引脚在空闲时为浮空输入或输出高电平的开漏, 因此这一结果在文档
+规定的条件之外, 不能据此判断芯片. 改动 periph.c 之后若只有这两项失败,
+不是改动引起的.
+
+频率检查另需运行 Leonix 的 Leonardo 作为频率计. 被测引脚接到 Leonardo
+排针上标为 13 的引脚, 即 ATmega32U4 的第 32 脚 PC7 (Leonardo Rev3d
+原理图); 两块板的 GND 相连, Leonardo 的 D8 与 D9 断开. 被测引脚 PA8、PB6、
+PA9 分别是 LQFP48 封装的第 29、42、30 脚 (DS5319 表 5). 然后运行::
 
   python3 tests/stm32/signal_check.py --leonix /dev/cu.usbmodemNNNN \
           --pin PA8 tests/stm32/signal.elf
@@ -536,3 +555,47 @@ isa.c 尚未检查 SXTB. 下面以 SXTB 为例, 说明增加一项指令检查�
 PA9, 各引脚输出的信号见 tests/stm32/signal.c 开头的注释. 这三个引脚都
 是 5 V 容忍引脚 (DS5319 表 5): Leonix 测量结束后把 D13 重新设为输出,
 5 V 电平会加到被测引脚上.
+
+
+征集对照数据: CRC 复位的时序
+============================
+
+本项目作者的板子与 ST 文档有几处不一致: Flash 容量寄存器读出 128 KB, 而
+丝印 C8 对应 64 KB (DS5319 第 7 节); REV_ID 为 0; 128 KB 之上另有 12 KB
+可以擦写的 Flash. 这块板子的芯片是否为 ST 原厂产品, 依据现有文档无法确认,
+因此在这块板子上观察到的、文档没有规定的行为, 也无法确认原厂芯片是否相同.
+CRC 单元的复位时序就是其中一项.
+
+在这块板子上, CRC_CR 写入 RESET 之后, 如果下一条指令就访问 CRC_DR, 中间
+没有其他指令, 复位来不及生效: 读取得到复位之前的值, 写入或者丢失, 或者在
+复位之前的值上计算. 隔 8 个 NOP 之后再访问, 结果与 RM0008 相符. ST 的
+stm32f1xx-hal-driver V1.1.10 中, HAL_CRC_Calculate() 在复位与第一次写入
+之间还有其他指令, 这一写法在该板子上计算正确. 只有比 HAL 更紧凑的写法才会
+出现上述现象, ST 的文档与代码都没有使用这种写法, 正常编程不受影响.
+
+RM0008 4.3 规定 DR 可以连续写入, 也可以写入后立即读取, 但没有规定 RESET
+生效所需的时间; ES096 没有 CRC 单元的条目. 判断这是否是 STM32F103 本身的
+行为, 只能在其他板子上运行同样的程序比较, 最有价值的是从 ST 授权渠道购得、
+能够确认为原厂芯片的板子.
+
+tests/stm32/crcreset.c 用汇编固定了被测的指令顺序, 每种情形重复 4 次. 接好
+ST-LINK 之后运行::
+
+  make stm32-tests
+  python3 tests/stm32/stm32test.py --stlink tests/stm32/crcreset.elf
+
+``info`` 行说明每次的结果: ``as RM0008`` 与文档相符, ``write lost`` 为写入
+丢失, ``RESET not applied`` 为在复位之前的值上计算, ``DR unchanged`` 为
+复位与写入都没有生效, ``read the value before RESET`` 为读到复位之前的值.
+``pass`` 行检查 HAL 的写法. 作者的板子在 2026-10-26 的结果为::
+
+  clock on, RESET, write: 0 of 4 as RM0008
+  clock on, read RCC, RESET, write: 0 of 4 as RM0008
+  RESET, write: 0 of 4 as RM0008
+  RESET, 8 NOPs, write: 4 of 4 as RM0008
+  RESET, read: 0 of 4 as RM0008
+
+如果手上有 STM32F103 的板子, 欢迎运行上述命令, 把完整输出连同板子的购买
+渠道、芯片丝印 (含底行的日期码与修订码) 以及 DBGMCU_IDCODE 的读数, 经
+CONTRIBUTING.zh_CN 所列的 GitHub 仓库提供给作者. 原厂芯片的结果若与上面
+相同, 该现象即属于芯片本身的行为, 本节会改写为对该行为的说明.
