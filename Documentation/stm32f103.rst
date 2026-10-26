@@ -537,21 +537,29 @@ isa.c 尚未检查 SXTB. 下面以 SXTB 为例, 说明增加一项指令检查�
 
 USART 一项以半双工回显检查三个 USART. 在本项目的板子上, 引脚设为复用
 推挽而 USART 尚未使能时, PA9、PA2 与 PB10 都不被驱动, 只保持此前的电平.
-该电平为低时回显出错: USART2 收到带帧错误的 0x00, 随后把 0x55 收为
-0xD5; USART1 与 USART3 丢失第一个字节. 浮空引脚的电平随时间漂移, 因此
-早先的 periph.elf 中 USART2 大多失败, 偶尔通过, 而 PA9 与 PB10 在复用
-推挽之后读数为高, USART1 与 USART3 未出过错. 以内部上拉或下拉预先设定引脚电平,
+该电平为低时回显的前两个字节出错. 浮空引脚的电平随时间漂移, 因此早先的
+periph.elf 中 USART2 大多失败, 偶尔通过, 而 PA9 与 PB10 在复用推挽之后
+读数为高, USART1 与 USART3 未出过错. 以内部上拉或下拉预先设定引脚电平,
 结果每次都随之改变. RM0008 27.3 只写到发送器未使能时 TX 引脚 "returns
 to its IO port configuration", 没有规定这时的电平. periph.c 因此先只置
 TE, 按 27.3.2 发送一个空闲帧, 把引脚驱动为高电平, 再置 HDSEL 与 RE.
 
-该检查仍然把 TX 引脚设为复用推挽, 而 RM0008 27.3.10 要求半双工的 TX
-引脚在空闲时为浮空输入或输出高电平的开漏, 这一结果在文档规定的条件
-之外, 不能据此判断芯片. 下列两点尚未查清:
+RM0008 对半双工 TX 引脚的规定前后不一: 9.1.11 表 24 给出复用推挽, 注释
+允许开漏; 27.3.10 要求浮空输入或输出高电平的开漏. periph.c 的推挽写法
+符合表 24. 按 27.3.10 改为开漏时, 该线需要上拉, 而复用功能模式下内部
+上下拉不起作用 (9.1.9). 以导线把 TX 接到相邻的 RX 引脚, 由 RX 的内部上拉
+(DS5319 表 36: 30 至 50 kOhm) 保持该线为高电平时, 三个 USART 共 3000 个
+字节全部回显正确, 引脚在 USART 未使能时都读为高. 测试次数有限, 该结果
+不能证明开漏写法在任何条件下都正确, 只说明在本板上没有出现上述问题.
 
-* 引脚为低电平时, 为什么 USART2 恰好得到 "0x00 带帧错误, 0x55 收为
-  0xD5" 这两种结果, 而 USART1 与 USART3 只丢失第一个字节.
-* 原厂 STM32F103 的 USART 未使能时是否同样不驱动复用推挽的 TX 引脚.
+下列两点尚未查清:
+
+* 推挽且引脚为低电平时, 出错的具体字节取决于引脚上接了什么. 引脚空置
+  时, USART2 收到带帧错误的 0x00, 随后把 0x55 收为 0xD5, USART1 与
+  USART3 丢失第一个字节; TX 以导线接到 RX 之后, 三个 USART 都是前一种
+  结果. 等待时间缩短到 20000 次读取时, USART2 也只丢失第一个字节, 带帧
+  错误的 0x00 在更晚的时刻才到达.
+* 原厂 STM32F103 的 USART 未使能时是否同样不驱动复用功能的 TX 引脚.
   该板芯片的来源无法确认, 见末节 "征集对照数据".
 
 频率检查另需运行 Leonix 的 Leonardo 作为频率计. 被测引脚接到 Leonardo
@@ -696,25 +704,37 @@ USART 未使能时的 TX 引脚
 ------------------------
 
 现象见 "在板上运行" 一节的 USART 一项. tests/stm32/usartidle.c 对三个
-USART 各做两种情形: 先以内部下拉或上拉保持 TX 引脚 1 ms, 再设为复用推挽,
-读取引脚, 然后按 periph.c 修改之前的顺序 (先置 HDSEL, 再同时置 UE、TE
-与 RE) 回显五个字节. 每种情形之间经 RCC 复位该 USART, 全部重复两次.
-TX 引脚 PA9、PA2 与 PB10 不得连接任何东西. 运行::
+USART 各做推挽与开漏两类情形: 先以内部下拉或上拉保持 TX 引脚 1 ms, 再设
+为复用功能, 读取引脚, 然后按 periph.c 修改之前的顺序 (先置 HDSEL, 再同时
+置 UE、TE 与 RE) 回显五个字节. 开漏时 RX 引脚设为带上拉的输入. 每种情形
+之间经 RCC 复位该 USART, 全部重复两次.
+
+请运行两次. 第一次 TX 与 RX 引脚都不接任何东西; 第二次用三根导线分别
+连接 PA9 与 PA10、PA2 与 PA3、PB10 与 PB11, 即排针上的 A9 与 A10、A2 与
+A3、B10 与 B11. 两次都运行::
 
   make stm32-tests
   python3 tests/stm32/stm32test.py --stlink tests/stm32/usartidle.elf
 
-``info`` 行给出每种情形中复用推挽之后引脚的读数、第一个字节之前是否已收到
-数据, 以及每个字节的回显结果. 引脚不随内部上下拉变化时, 该行为 ``FAIL``,
-说明引脚接了其他东西. 作者的板子在 2026-10-26 的汇总为::
+``info`` 行给出每种情形中复用功能之后引脚的读数、第一个字节之前是否已
+收到数据, 以及每个字节的回显结果. 推挽时引脚不随内部上下拉变化, 该行为
+``FAIL``, 说明引脚接了其他东西. 开漏时引脚读数为 0, 说明该线没有上拉.
+作者的板子在 2026-10-26 的汇总, 未接导线时为::
 
-  USART1 PA9 pull-down: pin reads 0 with USART off, 8 of 10 echoed
-  USART1 PA9 pull-up: pin reads 1 with USART off, 10 of 10 echoed
-  USART2 PA2 pull-down: pin reads 0 with USART off, 6 of 10 echoed
-  USART2 PA2 pull-up: pin reads 1 with USART off, 10 of 10 echoed
-  USART3 PB10 pull-down: pin reads 0 with USART off, 8 of 10 echoed
-  USART3 PB10 pull-up: pin reads 1 with USART off, 10 of 10 echoed
+  USART1 PA9 AF push-pull pull-down: pin reads 0 with USART off, 8 of 10 echoed
+  USART2 PA2 AF push-pull pull-down: pin reads 0 with USART off, 6 of 10 echoed
+  USART3 PB10 AF push-pull pull-down: pin reads 0 with USART off, 8 of 10 echoed
+  USART1 PA9 AF open-drain pull-down: pin reads 0 with USART off, 0 of 10 echoed
 
-若某个 USART 未使能时驱动其 TX 引脚, 下拉一行的读数会是 1. 失败的字节
-本身 (USART2 的 0x00 带帧错误与 0xD5, 其余两个 USART 的 ``got none``)
-也请一并提供, 可用于解释 "在板上运行" 一节列出的第一个未查清之处.
+接上导线之后为::
+
+  USART1 PA9 AF push-pull pull-down: pin reads 0 with USART off, 6 of 10 echoed
+  USART2 PA2 AF push-pull pull-down: pin reads 0 with USART off, 6 of 10 echoed
+  USART3 PB10 AF push-pull pull-down: pin reads 0 with USART off, 6 of 10 echoed
+  USART1 PA9 AF open-drain pull-down: pin reads 1 with USART off, 10 of 10 echoed
+
+其余各行: 推挽的上拉情形都是 10 of 10; 开漏的其余情形, 未接导线时都是
+0 of 10, 接线后都是 10 of 10.
+
+若某个 USART 未使能时驱动其 TX 引脚, 推挽下拉一行的读数会是 1. 失败的
+字节本身也请一并提供, 可用于解释 "在板上运行" 一节列出的第一个未查清之处.
