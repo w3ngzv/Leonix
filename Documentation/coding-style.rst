@@ -28,7 +28,8 @@ Leonix 的 C 与汇编代码遵循 Linux 126ad898a6e9 (v7.3-16337, 7.4 合并窗
 scripts/checkpatch.pl, 选项在 .checkpatch.conf 中. 该文件关闭了六类检查,
 每一类要求的设施 Leonix 都没有: printk() 的日志级别、compiler_attributes.h、
 strscpy() 以及 READ_ONCE(). 其余检查与 Linux 相同, 警告与错误同样需要处理.
-scripts/kconfig 是原样导入的 Linux 代码, 不在检查之列.
+scripts/kconfig 与 include/leonix/kconfig.h 中的宏是原样导入的 Linux 代码,
+不在检查之列; checkpatch.pl 对 Linux 自身的这些宏同样报告警告.
 
 
 文件开头
@@ -126,8 +127,4 @@ avr-libc 自身的函数不遵循这一约定.
 现状
 ====
 
-2026-10-26 在 feature/checkstyle 上, checkstyle.sh 报告 0 个错误与 17 个
-警告. 其中 include/leonix/kconfig.h 的 MACRO_ARG_UNUSED 出自原样复制的
-Linux 宏 ``__take_second_arg``, Linux 自身的 include/linux/kconfig.h 同样被
-报告. 警告中 ``ARRAY_SIZE``、``TRAILING_SEMICOLON`` 与 ``AVOID_EXTERNS``
-等类别可以直接改正, 尚未处理.
+2026-10-26 在 feature/checkstyle 上, checkstyle.sh 报告 0 个错误与 0 个警告.

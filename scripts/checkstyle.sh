@@ -8,8 +8,9 @@
 #   scripts/checkstyle.sh FILE...      the files named
 #   scripts/checkstyle.sh -g RANGE     each commit in RANGE, e.g. main..
 #
-# scripts/kconfig is left out of the first form: it is Linux's code, kept
-# as Linux has it.  Exits 1 if checkpatch reports an error or a warning.
+# scripts/kconfig and the macros in include/leonix/kconfig.h are left out
+# of the first form: they are Linux's code, kept as Linux has it, and
+# checkpatch warns about Linux's own copy of the macros too.  Exits 1 if checkpatch reports an error or a warning.
 cd "$(dirname "$0")/.." || exit 1
 
 if [ "$1" = -g ]; then
@@ -19,7 +20,8 @@ fi
 if [ $# -gt 0 ]; then
 	exec scripts/checkpatch.pl --terse --show-types -f "$@"
 fi
-git ls-files -z -- '*.c' '*.h' '*.S' ':!scripts/kconfig' |
+git ls-files -z -- '*.c' '*.h' '*.S' ':!scripts/kconfig' \
+	':!include/leonix/kconfig.h' |
 	xargs -0 scripts/checkpatch.pl --terse --show-types --summary-file -f |
 	grep -v ': total: 0 errors, 0 warnings,'
 # grep's status says whether anything was printed; checkpatch's is lost
