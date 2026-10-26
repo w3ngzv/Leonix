@@ -28,8 +28,19 @@ static void eeprom_dev_write(uint16_t off, const void *buf, uint16_t len)
 /* Mount lxfs on the EEPROM, formatting it if it holds none. */
 static int eeprom_fs_init(void)
 {
-	if (lxfs_init(eeprom_dev_read, eeprom_dev_write))
+	switch (lxfs_init(eeprom_dev_read, eeprom_dev_write)) {
+	case LXFS_CLEAN:
+		break;
+	case LXFS_FORMATTED:
 		printk("mkfs lxfs");
+		break;
+	case LXFS_REPAIRED:
+		printk("lxfs repaired");
+		break;
+	default:
+		printk("lxfs: unknown version, not mounted");
+		break;
+	}
 	return 0;
 }
 fs_initcall(eeprom_fs_init);
