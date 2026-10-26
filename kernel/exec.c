@@ -5,9 +5,17 @@
  * A program runs in the task that called exec(), on that task's stack,
  * until it exits: fork(), execve() and wait() in one, since there are no
  * processes.  A program may exec() another, as the shell does, so the
- * machines are a stack of VM_PROCS; the code of each stays open as a
+ * machines form a stack of VM_PROCS; each one's code stays open as a
  * struct file outside the descriptor table and is fetched with peek().
- * Descriptors are shared by all programs, as after fork() in Linux.
+ * All programs share the descriptors, as after fork() in Linux.
+ *
+ * 运行程序: exec() 与虚拟机的系统调用.
+ *
+ * 程序在调用 exec() 的任务中、在该任务的栈上运行, 直到退出. 由于没有进程,
+ * exec() 同时承担 fork()、execve() 与 wait() 的作用. 程序可以 exec() 另一个程
+ * 序, shell 即如此, 因此虚拟机构成至多 VM_PROCS 层的栈; 每个程序的代码作为描述
+ * 符表之外的 struct file 保持打开, 以 peek() 取指. 所有程序共用描述符, 与
+ * Linux 中 fork() 之后的情形相同.
  */
 #include <string.h>
 
@@ -19,14 +27,28 @@
 #include <leonix/unistd.h>
 #include <leonix/vm.h>
 
-#define VM_PROCS	2	/* the shell and the program it runs */
+/*
+ * VM_PROCS: the shell and the program it runs.  ARG_BUF holds all of
+ * exec()'s argument strings.  write() copies from code memory COPY_CHUNK
+ * bytes at a time.  A faulted program exits with FAULT_STATUS plus the
+ * fault.
+ *
+ * VM_PROCS: shell 及其运行的程序. ARG_BUF 容纳 exec() 的全部参数字符串. write()
+ * 从代码内存复制时每次复制 COPY_CHUNK 字节. 出错的程序以 FAULT_STATUS 加故障号
+ * 退出.
+ */
+#define VM_PROCS	2
 #define PATH_MAX	32
-#define ARG_BUF		48	/* exec() argument strings, all together */
-#define COPY_CHUNK	16	/* write() from code memory, a piece at a time */
-#define FAULT_STATUS	128	/* exit status of a faulted program, plus fault */
+#define ARG_BUF		48
+#define COPY_CHUNK	16
+#define FAULT_STATUS	128
 
 struct proc {
-	struct vm vm;		/* first, so that a struct vm * is a struct proc * */
+	/*
+	 * first, so that a struct vm * is a struct proc *
+	 * 放在首位, 使 struct vm * 也是 struct proc *
+	 */
+	struct vm vm;
 	struct file code;
 };
 
@@ -34,10 +56,14 @@ static struct proc procs[VM_PROCS];
 static uint8_t depth;
 
 /*
- * Scratch for paths and exec() arguments.  They are static to keep them
- * off the stack, which holds a machine's frames for as long as the
- * programs it starts run; each is done with before the next program
- * runs, since vm_args() copies the arguments into the new machine.
+ * Scratch for paths and exec() arguments, static to keep it off the
+ * stack, which holds a machine's frames for as long as the programs it
+ * starts run.  Each is done with before the next program runs, since
+ * vm_args() copies the arguments into the new machine.
+ *
+ * 路径与 exec() 参数的暂存区. 定义为 static, 以免占用栈: 一个虚拟机的栈帧在其
+ * 启动的程序运行期间一直留在栈上. 下一个程序运行之前, 各暂存区都已用完, 因为
+ * vm_args() 会把参数复制进新的虚拟机.
  */
 static char path_buf[PATH_MAX];
 static char arg_buf[ARG_BUF];
@@ -53,6 +79,8 @@ static int16_t proc_fetch(struct vm *vm, uint16_t off)
 /*
  * The data memory behind machine addresses @addr to @addr + @len, or NULL
  * if any of it is outside.
+ *
+ * 虚拟机地址 @addr 至 @addr + @len 对应的数据内存; 其中任何部分越界时返回 NULL.
  */
 static uint8_t *data_ptr(struct vm *vm, uint16_t addr, uint16_t len)
 {
@@ -63,7 +91,11 @@ static uint8_t *data_ptr(struct vm *vm, uint16_t addr, uint16_t len)
 	return vm->data + off;
 }
 
-/* Copy a terminated string from the machine.  Returns 0 or -EFAULT. */
+/*
+ * Copy a terminated string from the machine.  Returns 0 or -EFAULT.
+ *
+ * 从虚拟机复制一个带结束符的字符串. 成功时返回 0, 否则返回 -EFAULT.
+ */
 static int copy_string(struct vm *vm, uint16_t addr, char *buf, uint8_t size)
 {
 	int16_t c;
@@ -82,8 +114,11 @@ static int copy_string(struct vm *vm, uint16_t addr, char *buf, uint8_t size)
 
 /*
  * write() from anywhere in the machine; string constants are in code.
- * Out of line, so that the copy buffer is not on the stack under every
+ * noinline, so that the copy buffer is not on the stack under every
  * other system call.
+ *
+ * 从虚拟机的任意地址 write(), 字符串常量位于代码区. 标为 noinline, 使复制缓冲区
+ * 不出现在其他每个系统调用之下的栈上.
  */
 static int __attribute__((noinline)) sys_write(struct vm *vm, int fd, uint16_t addr, uint16_t count)
 {
@@ -115,6 +150,9 @@ static int __attribute__((noinline)) sys_write(struct vm *vm, int fd, uint16_t a
 /*
  * exec(argc, argv) from a program.  The strings are copied out of the
  * caller's memory first: the new machine lays them out in its own.
+ *
+ * 程序发出的 exec(argc, argv). 先把字符串从调用者的内存中复制出来, 新的虚拟机
+ * 再把字符串布置到自己的内存中.
  */
 static int sys_exec(struct vm *vm, int argc, uint16_t argv_addr)
 {
@@ -210,10 +248,22 @@ static const struct vm_ops proc_ops = {
 	.sys = vm_sys,
 };
 
-/*
- * Run program @argv[0] with its arguments and return its exit status:
- * 128 plus the fault if it faulted, or a negative errno if it could not
- * be started.  A name without '/' is looked for in /bin.
+/**
+ * exec() - run a program and wait for it to exit
+ * @argc: entries in @argv before the NULL
+ * @argv: the program's name, then its arguments, then NULL
+ *
+ * A name without '/' is looked for in /bin.
+ *
+ * 运行程序 @argv[0] 并等待其退出, @argv 的其余各项是参数, 以 NULL 结尾. 不含
+ * '/' 的名字在 /bin 中查找.
+ *
+ * Context: a task; the program runs on the task's stack.
+ * 在任务中调用, 程序在该任务的栈上运行.
+ * Return: the exit status, FAULT_STATUS plus the fault if the program
+ * faulted, or a negative errno if it could not be started.
+ * 返回程序的退出状态; 程序出错时返回 FAULT_STATUS 加故障号; 无法启动时返回负的
+ * errno.
  */
 int exec(int argc, const char *const argv[])
 {

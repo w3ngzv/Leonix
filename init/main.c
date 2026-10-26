@@ -1,4 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
+/*
+ * main(): bring up the kernel, start the status, USB and init tasks, and
+ * hand the CPU to the scheduler.  The status task shows the uptime and
+ * the idle share on the LCD and reports stack use to the log.
+ *
+ * main(): 初始化内核, 启动状态、USB 与 init 三个任务, 然后把 CPU 交给
+ * 调度器. 状态任务在 LCD 上显示运行时间与空闲比例, 并把栈用量写入日志.
+ */
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <util/atomic.h>
@@ -15,6 +23,9 @@
  * Sized from what sched_stack_free() reads on the board, with the
  * measurements in Documentation/notes/scheduler.rst.  Recheck them with
  * ps after any change to a task.
+ *
+ * 栈的大小依据 sched_stack_free() 在板上的读数确定, 测量值见
+ * Documentation/notes/scheduler.rst. 修改任务之后用 ps 重新核对.
  */
 #define STATUS_STACK_SIZE	224
 #define INIT_STACK_SIZE		318
@@ -26,11 +37,13 @@ static uint8_t status_stack[STATUS_STACK_SIZE] __task_stack;
 static uint8_t init_stack[INIT_STACK_SIZE] __task_stack;
 
 /*
- * Format one line, or part of one, and write it at (@col, @row).
+ * Format a line, or part of one, and write it at (@col, @row).  The
+ * lcd_show_*() functions are noinline: inlined, their line buffers would
+ * all sit in lcd_task()'s frame, under every printk() and I2C transfer.
  *
- * The lcd_show_*() functions are kept out of line.  Inlined, their line
- * buffers would all sit in lcd_task()'s frame, under every printk() and
- * I2C transfer the task makes.
+ * 格式化一行或一行的一部分, 写到 (@col, @row). lcd_show_*() 各函数标为
+ * noinline: 若被内联, 它们的行缓冲区都会留在 lcd_task() 的栈帧中, 位于每次
+ * printk() 与 I2C 传输之下.
  */
 #define lcd_print_at(col, row, fmt, ...)				\
 	({								\
@@ -41,7 +54,10 @@ static uint8_t init_stack[INIT_STACK_SIZE] __task_stack;
 			? -1 : 0;					\
 	})
 
-/* Line 0 names the kernel.  The display needs it again after a replug. */
+/*
+ * line 0's label, written again after a replug
+ * 第 0 行的标签, 重新插入后再写一次
+ */
 static int __attribute__((noinline)) lcd_show_banner(void)
 {
 	if (lcd_init() < 0)
@@ -50,10 +66,13 @@ static int __attribute__((noinline)) lcd_show_banner(void)
 }
 
 /*
- * Report each stack whose untouched bytes have reached a new low, the
- * way CONFIG_DEBUG_STACK_USAGE reports a new greatest depth in Linux.
- * Called once a second; after the first few seconds a report means a
- * path deeper than any before it has just run.
+ * Report each stack whose untouched bytes reach a new low, as Linux's
+ * CONFIG_DEBUG_STACK_USAGE reports a new greatest depth.  After the first
+ * seconds, a report means a path deeper than any before has run.
+ *
+ * 某个栈未被写过的字节数降到新低时报告, 与 Linux 的
+ * CONFIG_DEBUG_STACK_USAGE 报告新的最大深度相同. 开机最初几秒之后, 出现报告
+ * 即说明刚刚执行了一条比以往都深的路径.
  */
 static void __attribute__((noinline)) report_stack_usage(void)
 {
@@ -76,10 +95,12 @@ static void __attribute__((noinline)) report_stack_usage(void)
 }
 
 /*
- * Line 0 ends with the share of ticks that found the CPU idle since the
- * previous update, line 1 with the seconds since sched_start().  Both
- * fields are right-aligned so a shorter number overwrites a longer one.
- * The label on line 0 is lcd_show_banner()'s.
+ * Line 0 ends with the share of ticks idle since the last update, line 1
+ * with the seconds since sched_start().  Both are right-aligned, so a
+ * shorter number overwrites a longer one.
+ *
+ * 第 0 行末尾是自上次更新以来空闲节拍的比例, 第 1 行末尾是 sched_start()
+ * 以来的秒数. 两者都右对齐, 较短的数字因此能覆盖较长的数字.
  */
 static int __attribute__((noinline)) lcd_show_status(uint32_t idle_ticks, uint32_t ticks)
 {
@@ -91,24 +112,26 @@ static int __attribute__((noinline)) lcd_show_status(uint32_t idle_ticks, uint32
 }
 
 /*
- * A failed transfer means the backpack is gone or the bus glitched.
- * The task then retries a full lcd_init() every LCD_RETRY_INTERVAL,
- * since a backpack that lost power comes back with an uninitialised
- * HD44780, and goes back to the status once one succeeds.
+ * A failed transfer means the backpack is gone or the bus glitched.  The
+ * task then retries a full lcd_init() every LCD_RETRY_INTERVAL, since a
+ * backpack that lost power comes back with an uninitialised HD44780, and
+ * meanwhile flashes the RX LED, which lights on low: a dead display
+ * cannot report its own fault.
  *
- * While offline the RX LED flashes at 10 Hz, since a dead display
- * cannot report its own fault.  RX lights on low, so it is off with the
- * pin high.
+ * A replug within one update period misses no ACK; lcd_check() before
+ * each refresh catches it by the expander's power-on state.
  *
- * A backpack unplugged and back within one update period, under a
- * second, misses no ACK.  lcd_check() before each refresh catches it
- * instead, by the expander's power-on state, and the display is
- * initialised again on the spot.
+ * Stack reports run at every refresh and every retry, so a stack that
+ * runs low while the display is offline is still reported.
  *
- * The stack figures and the kernel log go to the USB console, see
- * arch/avr/usb.c; the display keeps the status, which needs no computer.
- * The stack check runs at every refresh and every retry, so a stack
- * that runs low while the display is offline is still reported.
+ * 传输失败说明转接板已断开或总线出现毛刺. 此后任务每隔 LCD_RETRY_INTERVAL
+ * 重试一次完整的 lcd_init(), 因为断电后重新接上的转接板, 其 HD44780 尚未
+ * 初始化; 其间闪烁低电平点亮的 RX LED, 因为失效的显示屏无法报告自身的故障.
+ *
+ * 一个更新周期内的拔插不会漏掉 ACK; 每次刷新前的 lcd_check() 通过扩展器的
+ * 上电状态发现这种情况.
+ *
+ * 每次刷新与每次重试都检查栈, 因此显示屏离线期间栈用量变低同样会被报告.
  */
 static void lcd_task(void)
 {
@@ -129,11 +152,14 @@ static void lcd_task(void)
 		if (online) {
 			sleep_until(next_update);
 			/*
-			 * Both counters are read at one instant, so the idle
-			 * ticks and the elapsed ticks cover the same window.
-			 * The refresh itself is part of the window: with the
-			 * I2C driver sleeping during transfers, most of its
-			 * time is idle.
+			 * Both counters are read at one instant, so they cover
+			 * the same window.  The refresh is inside the window;
+			 * the I2C driver sleeps during transfers, so most of
+			 * it is idle.
+			 *
+			 * 两个计数在同一时刻读取, 因此覆盖同一时间段. 刷新本身
+			 * 也在该时间段内; I2C 驱动在传输期间睡眠, 刷新的大部分
+			 * 时间是空闲.
 			 */
 			ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
 				now = get_jiffies();
@@ -183,10 +209,14 @@ static void lcd_task(void)
 }
 
 /*
- * Without CONFIG_HD44780, task 0 keeps only the stack reports.  Its
- * stack stays the LCD task's size: at 128 and 144 bytes it overflowed
- * on the board, a printk() with an interrupt frame on top going past
- * what a short run had measured.
+ * Without CONFIG_HD44780, task 0 keeps only the stack reports.  Its stack
+ * stays the LCD task's size: at 128 and 144 bytes it overflowed on the
+ * board, a printk() under an interrupt frame going past what a short run
+ * had measured.
+ *
+ * 没有 CONFIG_HD44780 时, 任务 0 只做栈用量报告. 其栈仍取 LCD 任务的大小:
+ * 128 与 144 字节时都曾在板上溢出, 原因是 printk() 叠加中断栈帧, 超出了
+ * 短时间运行中测得的用量.
  */
 static void stack_task(void)
 {
@@ -200,10 +230,14 @@ static void stack_task(void)
 }
 
 /*
- * The L and TX LEDs are off while the system runs; panic() lights them.
- * After a power-on reset the pins are inputs, and the L LED is driven
- * through a buffer from PC7, so a floating pin is not left to decide.
- * L lights on high, TX on low (Documentation/booting.rst, section 4).
+ * The L and TX LEDs stay off while the system runs; panic() lights them.
+ * L is driven through a buffer from PC7, so the pin is made an output
+ * rather than left floating after reset.  L lights on high, TX on low
+ * (Documentation/booting.rst, section 4).
+ *
+ * 系统运行期间 L 与 TX 两个 LED 保持熄灭, panic() 才点亮它们. L 经缓冲器由
+ * PC7 驱动, 因此复位后把该引脚设为输出, 不让其悬空. L 高电平点亮, TX 低
+ * 电平点亮 (Documentation/booting.rst 第 4 节).
  */
 static void leds_off(void)
 {
@@ -214,10 +248,19 @@ static void leds_off(void)
 
 extern const initcall_t __initcall_start[], __initcall_end[];
 
-/*
- * Linux's do_initcalls(), without the per-level loop: the linker script
- * has already sorted the table by level.  A failure is logged with the
- * function's word address, to look up in leonix.map.
+/**
+ * do_initcalls() - call every initcall, level 1 first
+ *
+ * Linux's do_initcalls() without the per-level loop: the linker script
+ * has sorted the table by level.  A failure is logged with the function's
+ * word address, to look up in leonix.map.
+ *
+ * 依次调用所有 initcall, 级别 1 最先. 与 Linux 的 do_initcalls() 相同,
+ * 但没有按级别的循环: 链接脚本已按级别排好了表. 失败时以函数的字地址记入
+ * 日志, 可在 leonix.map 中查找.
+ *
+ * Context: main(), before sched_start().  由 main() 在 sched_start()
+ * 之前调用.
  */
 void do_initcalls(void)
 {
