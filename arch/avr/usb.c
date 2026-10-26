@@ -39,6 +39,35 @@
  * Register sequences follow the ATmega32U4 datasheet, 7766J, chapters
  * 21 and 22; requests and descriptors follow USB 2.0 chapter 9 and the
  * CDC PSTN subclass 1.2.
+ *
+ * USB 设备控制器, 把板子呈现为 CDC-ACM 串口.
+ *
+ * 主机经由端点 0 枚举设备, 然后打开串口. 端点 1 是 CDC 通知端点, 该类要求其存
+ * 在, 但从不发送; 端点 2 接收主机写入的数据, 端点 3 负责发出.
+ *
+ * 数据端点承载终端 ttyACM0 (见 drivers/tty.c), 终端经由 acm_fops 读写数据端点.
+ * 来自主机的字节在 acm_rx_buf 中等待 acm_read(); 放不下的数据块留在控制器中, 控
+ * 制器随后对主机回 NAK, 直到读者腾出空间. acm_write() 把字节放入 acm_tx_buf,
+ * 由 usb_task() 发送. 只有 usb_task() 访问端点, 因为 UENUM 是所有代码共用的一个
+ * 选择.
+ *
+ * 该串口是内核日志的控制台. 主机保持 DTR (终端程序打开串口时置位) 期间, 每条
+ * printk() 记录作为一行发出. 打开串口时先重放日志中仍保留的记录.
+ *
+ * 把串口设为 1200 波特后关闭, 板子重启进入 Caterina, 并停留在其中等待烧录器: 这
+ * 是 Arduino core 的约定, 烧录因此无需按复位键. 见 Documentation/booting.rst 第
+ * 3 节.
+ *
+ * 端点中断只屏蔽自身并唤醒 usb_task(), 由 usb_task() 处理请求, 与 TWI 中断把
+ * I2C 传输交还给调用者的方式相同. 一次控制传输在数据包之间轮询端点, 最长
+ * USB_EP0_TIMEOUT_MS; 若在中断中进行, 中断会被关闭同样长的时间. 而且这会运行在
+ * 被中断的那个任务的栈上: 空闲任务只余 13 字节.
+ *
+ * 两个中断向量都在 switch.S 中, 使用与节拍中断相同的栈帧, 因此只要此处的处理函
+ * 数比 schedule() 浅, 其栈用量就由 TASK_STACK_RESERVE 覆盖.
+ *
+ * 寄存器操作顺序遵循 ATmega32U4 数据手册 7766J 第 21、22 章; 请求与描述符遵循
+ * USB 2.0 第 9 章与 CDC PSTN 子类 1.2.
  */
 #include <avr/io.h>
 #include <avr/pgmspace.h>
@@ -64,11 +93,17 @@
 /*
  * Arduino's IDs for a Leonardo running a sketch.  Caterina enumerates
  * as 0x0036; the host tells the two apart by the product ID.
+ *
+ * Arduino 为运行 sketch 的 Leonardo 分配的 ID. Caterina 以 0x0036 枚举, 主机凭
+ * 产品 ID 区分两者.
  */
 #define USB_VID			0x2341
 #define USB_PID			0x8036
 
-/* Datasheet 6.11.5: the PLL takes "several ms" to lock. */
+/*
+ * datasheet 6.11.5: the PLL takes "several ms" to lock
+ * 数据手册 6.11.5: PLL 锁定需要 "several ms"
+ */
 #define USB_PLL_TIMEOUT_MS	10
 #define USB_EP0_TIMEOUT_MS	10
 #define USB_SPIN_US		10
@@ -78,6 +113,10 @@
  * formatting a number: usb_task() 16, console_flush() 66, snprintk_P()
  * 4, vsnprintk_P() 22, put_number() 34, put() 2, 144 bytes in all.  The
  * switch frame and the canary bring it to 201.
+ *
+ * avr-gcc 9.5.0 -fstack-usage 给出的最深路径是 console_flush() 格式化数字:
+ * usb_task() 16, console_flush() 66, snprintk_P() 4, vsnprintk_P() 22,
+ * put_number() 34, put() 2, 共 144 字节. 加上切换栈帧与金丝雀为 201 字节.
  */
 #define USB_TASK_STACK_SIZE	224
 
@@ -116,21 +155,33 @@
 #define CDC_NOTIFY_INTERVAL_MS	64
 #define LANG_EN_US		0x0409
 
-/* CDC PSTN 1.2 table 18: DTR, set while the host has the port open. */
+/*
+ * CDC PSTN 1.2 table 18: DTR, set while the host has the port open
+ * CDC PSTN 1.2 表 18: DTR, 主机打开串口期间置位
+ */
 #define CDC_LINE_DTR		(1 << 0)
 
 /*
  * Caterina stays in the bootloader after a watchdog reset if the word at
  * BOOT_KEY_ADDR holds the key.  include/leonix/memlayout.h keeps
  * everything else off that word.
+ *
+ * 看门狗复位后, 若 BOOT_KEY_ADDR 处的字为该键值, Caterina 停留在引导程序中.
+ * include/leonix/memlayout.h 使其他数据都不占用该字.
  */
 #define BOOT_KEY		0x7777
 #define BOOTLOADER_BAUD		1200
 
-/* "[secs] text\r\n", one console line. */
+/*
+ * "[secs] text\r\n", one console line
+ * 一行控制台输出, 格式为 "[秒] 文本\r\n"
+ */
 #define CONSOLE_LINE		(LOG_TEXT + 12)
 
-/* Events from the endpoint interrupt to usb_task(). */
+/*
+ * events from the endpoint interrupt to usb_task()
+ * 端点中断传给 usb_task() 的事件
+ */
 #define USB_EV_SETUP		(1 << 0)
 #define USB_EV_RX		(1 << 1)
 
@@ -138,6 +189,9 @@
  * Ring sizes, powers of two so that the free-running 8-bit indices wrap
  * with them.  One producer and one consumer each, and an 8-bit index is
  * read and written in one instruction, so the rings need no lock.
+ *
+ * 环形缓冲区的大小取 2 的幂, 使自由增长的 8 位下标随之回绕. 每个环只有一个生产
+ * 者与一个消费者, 且 8 位下标以一条指令读写, 因此不需要锁.
  */
 #define ACM_RX_SIZE		32
 #define ACM_TX_SIZE		64
@@ -146,6 +200,9 @@
  * A packet as long as wMaxPacketSize does not end a bulk transfer on its
  * own, USB 2.0 5.8.3; the host may hold it until a short one follows.
  * Sending at most one byte less makes every packet short.
+ *
+ * 长度等于 wMaxPacketSize 的包本身不结束批量传输 (USB 2.0 5.8.3), 主机可能一直
+ * 等到短包到来. 每次至多少发一个字节, 每个包就都是短包.
  */
 #define ACM_TX_PACKET		(CDC_DATA_SIZE - 1)
 
@@ -163,7 +220,10 @@ struct setup_packet {
 	uint16_t length;
 };
 
-/* CDC PSTN 1.2 table 17, as the host last set it. */
+/*
+ * CDC PSTN 1.2 table 17, as the host last set it
+ * CDC PSTN 1.2 表 17, 取主机最后一次设置的值
+ */
 struct line_coding {
 	uint32_t baud;
 	uint8_t stop_bits;
@@ -173,11 +233,16 @@ struct line_coding {
 
 static const uint8_t device_desc[] PROGMEM = {
 	18, DESC_DEVICE, lo(0x0200), hi(0x0200),
-	0x02, 0x00, 0x00,		/* class CDC, at device level */
+	/* class CDC, at device level; 在设备级声明 CDC 类 */
+	0x02, 0x00, 0x00,
 	EP0_SIZE,
 	lo(USB_VID), hi(USB_VID), lo(USB_PID), hi(USB_PID),
 	lo(0x0100), hi(0x0100),		/* bcdDevice */
-	0, 1, 0,			/* no manufacturer, product, no serial */
+	/*
+	 * no manufacturer string, product string 1, no serial number
+	 * 没有厂商字符串, 产品字符串为 1, 没有序列号
+	 */
+	0, 1, 0,
 	1,
 };
 
@@ -187,16 +252,23 @@ static const uint8_t config_desc[CONF_DESC_LEN] PROGMEM = {
 	9, DESC_CONFIGURATION, lo(CONF_DESC_LEN), hi(CONF_DESC_LEN),
 	2, USB_CONF_VALUE, 0, 0x80, USB_MAX_POWER_MA / 2,
 
-	/* Interface 0, communication class, abstract control model */
+	/*
+	 * interface 0, communication class, abstract control model
+	 * 接口 0, 通信类, 抽象控制模型
+	 */
 	9, DESC_INTERFACE, 0, 0, 1, 0x02, 0x02, 0x01, 0,
 	5, DESC_CS_INTERFACE, 0x00, lo(0x0110), hi(0x0110),	/* header */
 	5, DESC_CS_INTERFACE, 0x01, 0x00, 1,	/* call management */
 	4, DESC_CS_INTERFACE, 0x02, 0x02,	/* ACM: line coding, line state */
-	5, DESC_CS_INTERFACE, 0x06, 0, 1,	/* union: 0 controls 1 */
+	/* union: 0 controls 1; union: 接口 0 控制接口 1 */
+	5, DESC_CS_INTERFACE, 0x06, 0, 1,
 	7, DESC_ENDPOINT, EP_IN | CDC_NOTIFY_EP, EP_INTERRUPT,
 	CDC_NOTIFY_SIZE, 0, CDC_NOTIFY_INTERVAL_MS,
 
-	/* Interface 1, data class */
+	/*
+	 * interface 1, data class
+	 * 接口 1, 数据类
+	 */
 	9, DESC_INTERFACE, 1, 0, 2, 0x0a, 0x00, 0x00, 0,
 	7, DESC_ENDPOINT, CDC_RX_EP, EP_BULK, CDC_DATA_SIZE, 0, 0,
 	7, DESC_ENDPOINT, EP_IN | CDC_TX_EP, EP_BULK, CDC_DATA_SIZE, 0, 0,
@@ -216,13 +288,23 @@ static volatile uint8_t usb_events;
 
 static uint8_t usb_config;
 static uint16_t line_state;
-static uint8_t console_replay;	/* DTR has just risen */
-static uint16_t console_sent;	/* last record sent */
+/*
+ * console_replay: DTR has just risen.  console_sent: the last record
+ * sent.
+ *
+ * console_replay: DTR 刚刚置位. console_sent: 最后发出的记录.
+ */
+static uint8_t console_replay;
+static uint16_t console_sent;
 static struct line_coding line = { 9600, 0, 0, 8 };
 
 static char acm_rx_buf[ACM_RX_SIZE];
 static volatile uint8_t acm_rx_head, acm_rx_tail;
-static volatile uint8_t acm_rx_held;	/* a bank waits for room */
+/*
+ * a bank waits for room
+ * 有数据块在等待空间
+ */
+static volatile uint8_t acm_rx_held;
 static struct wait_queue acm_rx_wq = WAIT_QUEUE_INIT;
 
 static char acm_tx_buf[ACM_TX_SIZE];
@@ -233,6 +315,10 @@ static struct wait_queue acm_tx_wq = WAIT_QUEUE_INIT;
  * Wait for any flag in @mask on the selected endpoint.  Returns the
  * flags found, or 0 once USB_EP0_TIMEOUT_MS has passed.  The count is
  * of spins, so time spent switched out only makes the wait longer.
+ *
+ * 等待当前选中端点上 @mask 中的任一标志. 返回找到的标志; 超过
+ * USB_EP0_TIMEOUT_MS 后返回 0. 计的是自旋次数, 因此被切换出去的时间只会使等待变
+ * 长.
  */
 static uint8_t ep_wait(uint8_t mask)
 {
@@ -247,7 +333,10 @@ static uint8_t ep_wait(uint8_t mask)
 	return flags;
 }
 
-/* Status stage of a request without data, or after an OUT data stage. */
+/*
+ * status stage of a request without data, or after an OUT data stage
+ * 无数据请求的状态阶段, 或 OUT 数据阶段之后的状态阶段
+ */
 static void ep0_ack(void)
 {
 	if (ep_wait(1 << TXINI))
@@ -265,6 +354,10 @@ static void ep0_stall(void)
  * shorter than the request that ends on a full packet needs a
  * zero-length packet after it, USB 2.0 5.5.3.  The host may end the
  * data stage early with the status OUT, datasheet 22.12.2.
+ *
+ * 控制读的数据阶段: 发送 @p 起的 @len 字节, 截断到主机请求的长度, 分为 EP0_SIZE
+ * 大小的包, 然后是状态 OUT. 应答比请求短且以满包结束时, 其后需要一个零长度包
+ * (USB 2.0 5.5.3). 主机可以用状态 OUT 提前结束数据阶段 (数据手册 22.12.2).
  */
 static void ep0_send(const uint8_t *p, uint8_t len, uint16_t requested,
 		     uint8_t in_flash)
@@ -296,7 +389,10 @@ static void ep0_send(const uint8_t *p, uint8_t len, uint16_t requested,
 	UEINTX = ~(1 << RXOUTI);
 }
 
-/* Datasheet 22.6.  Returns non-zero if the controller took the layout. */
+/*
+ * datasheet 22.6; non-zero if the controller took the layout
+ * 数据手册 22.6; 控制器接受该配置时返回非零值
+ */
 static uint8_t ep_configure(uint8_t ep, uint8_t cfg0, uint8_t cfg1)
 {
 	UENUM = ep;
@@ -310,6 +406,9 @@ static uint8_t ep_configure(uint8_t ep, uint8_t cfg0, uint8_t cfg1)
  * DPRAM is allocated in endpoint order, datasheet 21.9, so the CDC
  * endpoints are configured from the lowest up.  The data IN endpoint has
  * two banks, so one can fill while the other is on the bus.
+ *
+ * DPRAM 按端点顺序分配 (数据手册 21.9), 因此 CDC 端点从编号最小的开始配置. 数据
+ * IN 端点有两个数据块, 一个在总线上传输时另一个可以填充.
  */
 static void cdc_configure(void)
 {
@@ -355,7 +454,10 @@ static void get_descriptor(const struct setup_packet *setup)
 		}
 		break;
 	default:
-		/* Including DEVICE_QUALIFIER: a full-speed-only device stalls. */
+		/*
+		 * including DEVICE_QUALIFIER: a full-speed-only device stalls
+		 * 包括 DEVICE_QUALIFIER: 只支持全速的设备对其回 STALL
+		 */
 		ep0_stall();
 		return;
 	}
@@ -372,11 +474,17 @@ static void standard_request(const struct setup_packet *setup)
 		break;
 	case REQ_CLEAR_FEATURE:
 	case REQ_SET_FEATURE:
-		/* No remote wakeup, and no endpoint is ever halted. */
+		/*
+		 * no remote wakeup, and no endpoint is ever halted
+		 * 不支持远程唤醒, 也从不停止任何端点
+		 */
 		ep0_ack();
 		break;
 	case REQ_SET_ADDRESS:
-		/* Datasheet 22.7: UADD first, ADDEN after the status stage. */
+		/*
+		 * datasheet 22.7: UADD first, ADDEN after the status stage
+		 * 数据手册 22.7: 先写 UADD, 状态阶段之后再置 ADDEN
+		 */
 		UDADDR = lo(setup->value) & 0x7f;
 		ep0_ack();
 		if (ep_wait(1 << TXINI))
@@ -408,6 +516,8 @@ static void standard_request(const struct setup_packet *setup)
 /*
  * The watchdog fires after the status stage has gone out, and the host
  * sees the device leave the bus.  Tasks keep running until then.
+ *
+ * 看门狗在状态阶段发出之后触发, 主机看到设备离开总线. 在此之前任务照常运行.
  */
 static void enter_bootloader(void)
 {
@@ -457,7 +567,10 @@ static void ep0_setup(void)
 		return;
 	for (n = 0; n < sizeof(setup); n++)
 		*p++ = UEDATX;
-	/* Datasheet 22.12.2: a SETUP overrides whatever was in progress. */
+	/*
+	 * datasheet 22.12.2: a SETUP overrides whatever was in progress
+	 * 数据手册 22.12.2: SETUP 取代正在进行的任何操作
+	 */
 	UEINTX = ~((1 << RXSTPI) | (1 << RXOUTI) | (1 << TXINI));
 
 	if ((setup.request_type & REQ_TYPE_MASK) == REQ_TYPE_STANDARD)
@@ -472,6 +585,9 @@ static void ep0_setup(void)
  * Move what the host wrote into acm_rx_buf, datasheet 22.13.2.  A bank
  * that does not fit stays in the controller with its interrupt masked;
  * acm_read() asks for another pass once it has made room.
+ *
+ * 把主机写入的数据移入 acm_rx_buf (数据手册 22.13.2). 放不下的数据块留在控制器
+ * 中, 其中断被屏蔽; acm_read() 腾出空间之后再请求处理一次.
  */
 static void cdc_rx(void)
 {
@@ -498,6 +614,9 @@ out:
  * Send @len bytes as one packet on the data IN endpoint.  Returns -1 if
  * the bank stays full, which happens when nothing on the host reads the
  * port.  @len is at most CDC_DATA_SIZE.
+ *
+ * 把 @len 字节作为一个包从数据 IN 端点发出. 数据块一直为满时返回 -1, 主机上没有
+ * 程序读取串口时即如此. @len 至多为 CDC_DATA_SIZE.
  */
 static int cdc_write(const char *s, uint8_t len)
 {
@@ -529,6 +648,13 @@ static uint8_t console_open(void)
  *
  * Kept out of line, so that its line buffer and record are not in
  * usb_task()'s frame under the printk() in standard_request().
+ *
+ * 发送 console_sent 之后的记录. 打开串口时从日志中仍保留的最旧记录开始, 并报告
+ * 其前有多少条记录. 来不及发送就被覆盖的记录以同样方式计数. 主机停止读取时, 余
+ * 下的记录被丢弃, 不再重试, 使停滞的串口每条记录只耗费一次超时.
+ *
+ * 标为 noinline, 使其行缓冲区与记录不留在 usb_task() 的栈帧中, 位于
+ * standard_request() 的 printk() 之下.
  */
 static void __attribute__((noinline)) console_flush(void)
 {
@@ -566,7 +692,10 @@ static void __attribute__((noinline)) console_flush(void)
 	console_sent = newest;
 }
 
-/* Taken in wait_event(), with interrupts off. */
+/*
+ * taken in wait_event(), with interrupts off
+ * 在 wait_event() 中关中断取出
+ */
 static uint8_t usb_take_events(void)
 {
 	uint8_t events = usb_events;
@@ -587,6 +716,10 @@ static uint8_t console_pending(void)
  * queue meanwhile waits for the next open.  If the host holds the port
  * open but stops reading, the queue is dropped, so that a writer does
  * not wait on a terminal that is gone.
+ *
+ * 在日志记录之后发送 acm_write() 排队的数据. 串口关闭期间数据保留在队列中, 使开
+ * 机时 shell 的提示符在终端打开串口后出现; 其间填满队列的写入者等待下一次打开.
+ * 主机保持串口打开却停止读取时丢弃队列, 使写入者不会一直等待已消失的终端.
  */
 static void acm_flush(void)
 {
@@ -655,7 +788,10 @@ static const struct file_operations acm_fops = {
 	.write = acm_write,
 };
 
-/* The console kick from printk(), possibly in an interrupt. */
+/*
+ * the console kick from printk(), possibly in an interrupt
+ * printk() 发来的控制台通知, 可能在中断中调用
+ */
 static void usb_console_kick(void)
 {
 	wake_up(&usb_wq);
@@ -665,6 +801,9 @@ static void usb_console_kick(void)
  * Serves what the endpoint interrupt reported, then unmasks it.  A
  * SETUP is looked for whenever the task wakes, since a bus reset in the
  * middle of a request leaves endpoint 0 unmasked again.
+ *
+ * 处理端点中断报告的事件, 然后解除屏蔽. 任务每次醒来都检查 SETUP, 因为请求进行
+ * 中的总线复位会使端点 0 重新处于未屏蔽状态.
  */
 static void usb_task(void)
 {
@@ -688,9 +827,17 @@ static void usb_task(void)
 	}
 }
 
-/*
- * End of a bus reset: every endpoint but 0 is gone, datasheet 22.4.
- * Called from switch.S with interrupts off; never wakes a task.
+/**
+ * usb_general_interrupt() - handle the end of a bus reset
+ *
+ * Every endpoint but 0 is gone after a bus reset, datasheet 22.4.
+ *
+ * 总线复位结束: 除端点 0 外的所有端点都已消失 (数据手册 22.4).
+ *
+ * Context: the USB general vector in switch.S, interrupts disabled.
+ * 由 switch.S 中的 USB general 向量在关中断状态下调用.
+ * Return: 0; no task is woken.
+ * 返回 0, 不唤醒任何任务.
  */
 uint8_t usb_general_interrupt(void)
 {
@@ -706,11 +853,19 @@ uint8_t usb_general_interrupt(void)
 	return 0;
 }
 
-/*
- * Masks the endpoint that raised the interrupt and hands it to
- * usb_task().  usb_task() may be in the middle of using UENUM, so the
- * selection is put back.  Returns the number of tasks woken, for
- * switch.S.
+/**
+ * usb_endpoint_interrupt() - hand an endpoint event to usb_task()
+ *
+ * Masks the endpoint that raised the interrupt.  usb_task() may be in
+ * the middle of using UENUM, so the selection is put back.
+ *
+ * 屏蔽引发中断的端点, 交给 usb_task() 处理. usb_task() 可能正在使用 UENUM, 因此
+ * 恢复原来的选择.
+ *
+ * Context: the USB endpoint vector in switch.S, interrupts disabled.
+ * 由 switch.S 中的 USB endpoint 向量在关中断状态下调用.
+ * Return: the number of tasks woken, for switch.S.
+ * 返回被唤醒的任务数, 供 switch.S 使用.
  */
 uint8_t usb_endpoint_interrupt(void)
 {
@@ -731,11 +886,20 @@ uint8_t usb_endpoint_interrupt(void)
 	return wake_up(&usb_wq);
 }
 
-/*
- * Datasheet 21.12, "Power On the USB interface".  The board then attaches
- * on its own whenever VBUS is present, datasheet 22.2.  Called before
- * sched_start(), with interrupts off.  Returns -1, with the controller
- * left off, if the PLL does not lock or the task cannot be created.
+/**
+ * usb_init() - power on the USB controller and start usb_task()
+ *
+ * Follows datasheet 21.12, "Power On the USB interface".  The board then
+ * attaches on its own whenever VBUS is present, datasheet 22.2.
+ *
+ * 按数据手册 21.12 "Power On the USB interface" 为 USB 控制器上电, 并启动
+ * usb_task(). 此后只要 VBUS 存在, 板子就自行接入总线 (数据手册 22.2).
+ *
+ * Context: before sched_start(), interrupts disabled.
+ * 在 sched_start() 之前、关中断状态下调用.
+ * Return: 0, or -1 with the controller left off if the PLL does not
+ * lock or the task cannot be created.
+ * 成功时返回 0; PLL 未锁定或无法创建任务时返回 -1, 控制器保持关闭.
  */
 int usb_init(void)
 {
@@ -748,8 +912,12 @@ int usb_init(void)
 
 	UHWCON = 1 << UVREGE;
 	USBCON = (1 << USBE) | (1 << FRZCLK);
-	PLLFRQ = 1 << PDIV2;			/* 48 MHz, straight to USB */
-	PLLCSR = (1 << PINDIV) | (1 << PLLE);	/* 16 MHz crystal, halved */
+	/*
+	 * 48 MHz, straight to USB, from the 16 MHz crystal halved
+	 * PLL 输出 48 MHz 直接供给 USB, 输入为 16 MHz 晶振的二分频
+	 */
+	PLLFRQ = 1 << PDIV2;
+	PLLCSR = (1 << PINDIV) | (1 << PLLE);
 	while (!(PLLCSR & (1 << PLOCK))) {
 		if (!spins--) {
 			PLLCSR = 0;
@@ -760,7 +928,8 @@ int usb_init(void)
 		_delay_us(USB_SPIN_US);
 	}
 	USBCON = (1 << USBE) | (1 << OTGPADE);
-	UDCON = 0;				/* full speed, attach */
+	/* full speed, attach; 全速, 接入 */
+	UDCON = 0;
 	UDIEN = 1 << EORSTE;
 	return 0;
 }
