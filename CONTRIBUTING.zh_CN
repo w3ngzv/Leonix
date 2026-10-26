@@ -1,0 +1,93 @@
+向 Leonix 贡献代码
+==================
+
+Leonix 经 GitHub 的 pull request 接受改动, 地址为
+https://github.com/w3ngzv/Leonix. 本文说明改动在提交之前需要满足的要求.
+英文版见 CONTRIBUTING.
+
+
+获取源码
+--------
+
+/bin 中的程序及其汇编器是 external/ 下的 git 子模块, "make check" 需要该
+汇编器:
+
+	git clone --recurse-submodules https://github.com/w3ngzv/Leonix.git
+
+各系统所需的工具链见 Documentation/building.rst. QEMU 测试另需
+qemu-system-avr.
+
+
+代码规范
+--------
+
+C 与汇编代码遵循 Linux 的 Documentation/process/coding-style.rst, 并加上
+Documentation/coding-style.rst 中的补充规则. 补充规则大多来自目标平台:
+avr-gcc 的 int 为 16 位, 中断与任务共享 2.5 KiB SRAM, EEPROM 可能在写入
+中途断电.
+
+每条代码注释都同时写英文与中文. 以中文为准, 两者在同一个提交中修改.
+
+
+检查
+----
+
+提交之前运行下列命令, 全部须通过:
+
+	scripts/checkstyle.sh -g main..    # 对每个提交运行 checkpatch
+	scripts/checkstyle.sh              # checkpatch、kernel-doc 与行宽
+	make                               # 固件映像
+	make check                         # 主机测试
+	make check-qemu                    # 以 avr-gcc 构建的 lxfs 测试
+
+改动文件系统的写入路径时, 须在 tests/test_lxfs.c 的复位测试中加入对应的
+用例; 该测试在操作的每个字节处模拟断电.
+
+改变固件映像的改动, 在提交说明中写出改动前后的 avr-size 输出. 改动
+arch/avr 或 drivers 时, 写明是否在板上运行过, 以及在板上检查了什么.
+
+
+提交
+----
+
+每个提交只含一项改动, 每个提交处的源码树都能构建并通过上述检查, 因此任何
+一个提交都可以单独回退.
+
+标题写出所属部分与改动, 不超过 72 列, 末尾不加句号:
+
+	tests: 在 qemu-system-avr 中运行 lxfs 测试
+	scripts: checkstyle.sh 不检查 include/leonix/kconfig.h
+
+正文说明改动的原因: 所修复的故障, 或所依据的数据手册章节、Linux 提交.
+改了什么已见于 diff, 正文不再重复. 中文与英文均可.
+
+提交说明以真实姓名的 Signed-off-by 行结尾:
+
+	Signed-off-by: Your Name <you@example.org>
+
+该行表示同意 Developer Certificate of Origin 1.1, 与 Linux 相同
+(Documentation/process/submitting-patches.rst 的 "Sign your work" 一节):
+改动由本人编写, 或本人有权以所涉文件的许可证提交该改动.
+
+
+子模块
+------
+
+shell、各命令与汇编器的改动提交到各自的仓库, 仓库列在 external/README 中.
+把子模块移到较新的提交, 在本仓库中单独作为一个提交, 并在以该提交构建并
+测试内核之后进行.
+
+
+参考文献
+--------
+
+代码所依据的数据手册与其他文献, 连同文献编号与修订版次登记在
+Documentation/references/index.rst 中, 注释中按表号或节号引用. 文献文件
+本身只在其许可证允许再分发时才提交.
+
+
+许可证
+------
+
+Leonix 以 GPL-2.0-only 发布. 新文件与现有文件一样, 以
+SPDX-License-Identifier 行开头.
