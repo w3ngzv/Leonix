@@ -4,9 +4,15 @@
  * USB interrupts and arch_yield().
  *
  * The interrupt has already pushed the PC.  The frame below it is r0,
- * SREG, r1, r2 ... r31, from high address to low, and task_create()
- * in kernel/sched.c builds the same frame for a task that has not run
- * yet.  The two must be changed together.
+ * SREG, r1, r2 ... r31, from high address to low, and task_init() in
+ * kernel/sched.c builds the same frame for a task that has not run yet.
+ * The two must be changed together.
+ *
+ * 在 Timer1 比较匹配 A 中断、TWI 与 USB 中断以及 arch_yield() 中切换上下文.
+ *
+ * 中断已经压入 PC. PC 之下的栈帧自高地址向低地址依次为 r0、SREG、r1、r2 ...
+ * r31; kernel/sched.c 中的 task_init() 为尚未运行的任务构造同样的栈帧. 两者必须
+ * 一起修改.
  */
 
 #include <avr/io.h>
@@ -32,7 +38,7 @@
 	pop	r0
 	.endm
 
-	/* current->sp = SP */
+	/* current->sp = SP; 保存 SP */
 	.macro	store_sp
 	lds	r26, current
 	lds	r27, current + 1
@@ -45,6 +51,9 @@
 	/*
 	 * SP = current->sp.  The two halves are written separately, which
 	 * is only safe because the I flag is clear at every use.
+	 *
+	 * SP = current->sp. 两个半字分开写入, 这只因每处使用时 I 标志都已清除才
+	 * 是安全的.
 	 */
 	.macro	load_sp
 	lds	r26, current
@@ -73,6 +82,11 @@ __vector_17:
 	 * the next tick instead of up to 1 ms later.  The frame is the
 	 * tick's, so either path can resume a task the other saved.
 	 * Without CONFIG_I2C the weak default in start.S stays in place.
+	 *
+	 * TWI 中断. twi_interrupt() 唤醒了任务时返回非零值; 立即切换使 I2C 调用
+	 * 者在下一个节拍之前继续运行, 而不必等待至多 1 ms. 栈帧与节拍中断的相
+	 * 同, 因此两条路径都能恢复另一条路径保存的任务. 没有 CONFIG_I2C 时保留
+	 * start.S 中的弱默认处理.
 	 */
 	.global	__vector_36
 __vector_36:
@@ -90,6 +104,9 @@ __vector_36:
 	/*
 	 * USB general and endpoint interrupts, the same way as TWI.  The
 	 * endpoint handler wakes usb_task(), see arch/avr/usb.c.
+	 *
+	 * USB general 与 endpoint 中断, 处理方式与 TWI 相同. endpoint 处理函数
+	 * 唤醒 usb_task(), 见 arch/avr/usb.c.
 	 */
 	.global	__vector_10
 __vector_10:
@@ -119,6 +136,10 @@ __vector_11:
 	 * cli comes first so the saved SREG has I clear like every other
 	 * frame; reti sets it again on the way out, in whichever task that
 	 * turns out to be.
+	 *
+	 * 任务在节拍结束之前让出 CPU. call 已把返回地址压在中断压入 PC 的位置,
+	 * 因此此处构造的栈帧与节拍中断的相同. 先执行 cli, 使保存的 SREG 与其他
+	 * 每个栈帧一样 I 为 0; reti 在返回时重新置位 I, 无论返回到哪个任务.
 	 */
 	.global	arch_yield
 arch_yield:
@@ -130,6 +151,12 @@ arch_yield:
 	restore_context
 	reti
 
+	/*
+	 * Enter current from the frame task_init() built.  reti enables
+	 * interrupts.
+	 *
+	 * 从 task_init() 构造的栈帧进入 current. reti 打开中断.
+	 */
 	.global	arch_start_first_task
 arch_start_first_task:
 	load_sp

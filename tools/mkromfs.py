@@ -6,6 +6,11 @@ Usage: mkromfs.py output.c name=file ...
 
 Each file becomes a PROGMEM array, named in the table that fs/romfs.c
 mounts.  The entries are written in the order given.
+
+把文件打包成 flash 中只读文件系统的 C 源文件.
+
+每个文件成为一个 PROGMEM 数组, 登记在 fs/romfs.c 挂载的表中. 各项按给出的顺序
+写入.
 """
 
 import re

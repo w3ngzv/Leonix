@@ -12,6 +12,7 @@ Leonix 是运行在 Arduino Leonardo (ATmega32U4) 上的内核, 用 C 与 AVR �
    :caption: 使用
 
    building
+   coding-style
 
 .. toctree::
    :maxdepth: 2

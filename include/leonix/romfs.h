@@ -6,7 +6,10 @@
 
 #include <leonix/fs.h>
 
-/* One file, everything in flash.  The table comes from tools/mkromfs.py. */
+/*
+ * one file, all in flash; the table comes from tools/mkromfs.py
+ * 一个文件, 全部存放在 flash 中; 该表由 tools/mkromfs.py 生成
+ */
 struct romfs_entry {
 	const char *name;
 	const uint8_t *data;

@@ -1,16 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * /proc: kernel state as text, for ps, dmesg and uptime to read, the way
- * Linux shows it.  The text is made one line at a time as it is read:
- * private_data is the line, f_pos the offset in it, so a reader may take
- * it in any size of piece.  Only one task reads files, so one line
- * buffer serves every open /proc file.  The line makers are kept out of
- * line so that only one of their frames is on the stack at a time.
+ * /proc: kernel state as text, for ps, dmesg and uptime.  The text is made
+ * a line at a time as it is read; private_data holds the line number and
+ * f_pos the offset in it, so a reader may take any size of piece.  Only
+ * one task reads files, so one line buffer serves every open /proc file.
+ * The line makers are noinline so that one frame at a time is on the
+ * stack.
  *
  *   tasks    "ID S FREE", then a line per task, the idle task last
  *   kmsg     the kernel log, oldest first, "[secs] text"
- *   uptime   seconds since boot and of them idle, with hundredths, in
- *            Linux's format
+ *   uptime   seconds since boot and of them idle, as in Linux
+ *
+ * /proc: 以文本形式给出的内核状态, 供 ps、dmesg 与 uptime 读取. 文本在读取
+ * 时逐行生成; private_data 保存行号, f_pos 保存行内偏移, 因此读者可以按任意
+ * 大小分段读取. 只有一个任务读文件, 所有打开的 /proc 文件共用一个行缓冲区.
+ * 生成各行的函数标为 noinline, 使栈上同时只有其中一个的栈帧.
+ *
+ *   tasks    "ID S FREE", 随后每个任务一行, 空闲任务在最后
+ *   kmsg     内核日志, 从最旧的开始, 格式为 "[秒] 文本"
+ *   uptime   开机以来的秒数及其中空闲的秒数, 格式与 Linux 相同
  */
 #include <avr/pgmspace.h>
 #include <string.h>
@@ -43,7 +51,10 @@ static const char state_letters[] PROGMEM = {
 
 static char line[PROC_LINE];
 
-/* Line @n of the tasks file into line[]; returns its length, 0 past the end. */
+/*
+ * line @n of tasks into line[]: its length, or 0 past the end
+ * 把 tasks 的第 @n 行写入 line[], 返回其长度, 超出末尾时返回 0
+ */
 static uint8_t __attribute__((noinline)) tasks_line(uint8_t n)
 {
 	uint8_t state;
@@ -67,7 +78,10 @@ static uint8_t __attribute__((noinline)) kmsg_line(uint8_t n)
 	uint16_t newest = log_newest();
 	uint16_t first = newest > LOG_RECORDS ? newest - LOG_RECORDS + 1 : 1;
 
-	/* A record overwritten while the file is read ends it early. */
+	/*
+	 * a record overwritten during the read ends the file early
+	 * 读取期间有记录被覆盖时, 文件提前结束
+	 */
 	if (first + n > newest || log_read(first + n, &rec) < 0)
 		return 0;
 	return snprintk(line, sizeof(line), "[%5u] %s\n", rec.secs, rec.text);
@@ -101,8 +115,11 @@ static uint8_t proc_line(uint8_t file, uint8_t n)
 }
 
 /*
- * The file number is kept in the top bits of private_data, the line in
- * the low five: no file here has more than 32 lines.
+ * private_data holds the file in bits 7-5 and the line in bits 4-0; no
+ * file here has more than 32 lines.
+ *
+ * private_data 的第 7-5 位保存文件编号, 第 4-0 位保存行号; 此处没有超过
+ * 32 行的文件.
  */
 #define PROC_FILE(f)	((f)->private_data >> 5)
 #define PROC_LINE_NR(f)	((f)->private_data & 0x1f)
@@ -142,7 +159,19 @@ static const struct file_operations proc_dir_fops = {
 	.readdir = proc_readdir,
 };
 
-/* Mounted at /proc by fs/vfs.c. */
+/**
+ * procfs_open() - open /proc or a file in it
+ * @f: the file to fill in
+ * @rest: the path after "/proc": "" or "/" for the directory, or "/name"
+ * @flags: open() flags
+ *
+ * 打开 /proc 或其中的文件. @rest 是 "/proc" 之后的路径, "" 或 "/" 表示
+ * 目录本身, "/name" 表示文件.
+ *
+ * Return: 0, -EROFS for writing or O_CREAT, or -ENOENT if no file has
+ * the name.  成功时返回 0, 以写方式或带 O_CREAT 打开时返回 -EROFS, 没有
+ * 同名文件时返回 -ENOENT.
+ */
 int procfs_open(struct file *f, const char *rest, uint16_t flags)
 {
 	uint8_t i;

@@ -2,9 +2,12 @@
 #ifndef _LEONIX_EXEC_H
 #define _LEONIX_EXEC_H
 
-/* Most words a command line is cut into, the program name included. */
+/*
+ * most words a command line is cut into, the program name included
+ * 一条命令行至多切分成的词数, 含程序名
+ */
 #define MAX_ARGS	6
 
-int exec(int argc, char **argv);
+int exec(int argc, const char *const argv[]);
 
 #endif /* _LEONIX_EXEC_H */

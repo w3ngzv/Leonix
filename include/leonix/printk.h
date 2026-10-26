@@ -14,6 +14,13 @@
  *
  * Sixteen records hold everything written in the first seconds after
  * boot, before a terminal on the USB console is likely to be open.
+ *
+ * 内核日志保留最近 LOG_RECORDS 条消息, 每条带有开机以来的秒数. 消息截断为
+ * LOG_TEXT - 1 个字符, 加上时间戳正好是 16 字节的记录. 该长度原本按 LCD 的一行
+ * 选定, LCD 现已不再显示日志.
+ *
+ * 16 条记录能容纳开机后最初几秒写入的全部内容, 那时 USB 控制台上的终端多半尚未
+ * 打开.
  */
 #define LOG_RECORDS	16
 #define LOG_TEXT	14
@@ -23,7 +30,10 @@ struct log_record {
 	char text[LOG_TEXT];
 };
 
-/* The format string lives in flash, as for snprintk(). */
+/*
+ * the format string lives in flash, as for snprintk()
+ * 格式串存放在 flash 中, 与 snprintk() 相同
+ */
 #define printk(fmt, ...)	printk_P(PSTR(fmt), ##__VA_ARGS__)
 
 void printk_P(const char *fmt, ...);

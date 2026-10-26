@@ -23,3 +23,4 @@ fs/romfs_image.c
 /include/config/
 /include/generated/
 /defconfig
+tests/test_lxfs.avr.elf
