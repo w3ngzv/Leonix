@@ -1,0 +1,103 @@
+Contributing to Leonix
+======================
+
+Leonix takes changes as pull requests on GitHub, at
+https://github.com/w3ngzv/Leonix.  This file covers what a change needs
+before it is sent.  A Chinese version is in CONTRIBUTING.zh_CN.
+
+
+Getting the tree
+----------------
+
+The programs in /bin and their assembler are git submodules under
+external/, and "make check" needs the assembler:
+
+	git clone --recurse-submodules https://github.com/w3ngzv/Leonix.git
+
+Documentation/building.rst lists the toolchain for each system.  The
+QEMU test also needs qemu-system-avr.
+
+
+Coding style
+------------
+
+The C and assembly code follows Linux's
+Documentation/process/coding-style.rst, with the additions in
+Documentation/coding-style.rst.  Most of the additions come from the
+target: int is 16 bits under avr-gcc, interrupts and tasks share
+2.5 KiB of SRAM, and the EEPROM can lose power in the middle of a
+write.
+
+Every code comment is written in English and in Chinese.  The Chinese
+text is the authoritative one, and both are changed in the same commit.
+
+
+Checks
+------
+
+Run these before sending.  All of them must pass:
+
+	scripts/checkstyle.sh -g main..    # checkpatch, on each commit
+	scripts/checkstyle.sh              # checkpatch, kernel-doc, width
+	make                               # the image
+	make check                         # host tests
+	make check-qemu                    # lxfs test built by avr-gcc
+
+A change to the filesystem's write paths needs a case in the reset test
+of tests/test_lxfs.c, which cuts power at every byte of an operation.
+
+A change that alters the image states the avr-size output before and
+after in the commit message.  A change to arch/avr or drivers says
+whether it was run on a board, and what was checked there.
+
+
+Commits
+-------
+
+Each commit is one change, and the tree builds and passes the checks
+at every commit, so that any one of them can be reverted on its own.
+
+The subject names the area and the change, under 72 columns, with no
+full stop:
+
+	tests: 在 qemu-system-avr 中运行 lxfs 测试
+	scripts: checkstyle.sh 不检查 include/leonix/kconfig.h
+
+The body explains why the change is needed: the failure it fixes, the
+datasheet section or the Linux commit it follows.  The diff already
+shows what changed, so the body does not repeat it.  Chinese or
+English are both accepted.
+
+End the message with a Signed-off-by line in your real name:
+
+	Signed-off-by: Your Name <you@example.org>
+
+The line certifies the Developer Certificate of Origin 1.1, as in Linux
+(Documentation/process/submitting-patches.rst, "Sign your work"): that
+you wrote the change or have the right to submit it under the licence
+of the files it touches.
+
+
+Submodules
+----------
+
+Changes to the shell, the commands or the assembler go to their own
+repositories, listed in external/README.  Moving a submodule to a newer
+commit is a commit of its own in this tree, made after the kernel has
+been built and tested against it.
+
+
+References
+----------
+
+A datasheet or other document the code relies on is listed in
+Documentation/references/index.rst with its document number and
+revision, and cited in the comment by table or section.  Commit the
+file itself only if its licence allows redistribution.
+
+
+Licence
+-------
+
+Leonix is GPL-2.0-only.  A new file starts with an
+SPDX-License-Identifier line, as the existing files do.

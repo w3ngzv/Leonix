@@ -3,6 +3,8 @@
 # For a description of the syntax of this configuration file,
 # see Documentation/kbuild/kconfig-language.rst in Linux.
 #
+# 本配置文件的语法见 Linux 的 Documentation/kbuild/kconfig-language.rst.
+#
 mainmenu "Leonix/$(ARCH) Kernel Configuration"
 
 source "arch/$(SRCARCH)/Kconfig"

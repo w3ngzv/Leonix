@@ -6,6 +6,12 @@
  * the timeout path it leaves the USB controller running.  See
  * Documentation/booting.rst, section 3, for why the USB registers are
  * written unconditionally.
+ *
+ * ATmega32U4 的复位入口与中断向量表.
+ *
+ * Caterina 跳转到此处时中断已关闭且 IVSEL 为 0, 但在超时路径上 Caterina 让 USB
+ * 控制器保持运行. USB 寄存器为何无条件写入, 见 Documentation/booting.rst 第 3
+ * 节.
  */
 
 #include <avr/io.h>
@@ -38,7 +44,10 @@ __reset:
 	out	_SFR_IO_ADDR(SPH), r29
 	out	_SFR_IO_ADDR(SPL), r28
 
-	/* Return the USB controller and the PLL to their reset values. */
+	/*
+	 * return the USB controller and the PLL to their reset values
+	 * 把 USB 控制器与 PLL 恢复为复位值
+	 */
 	ldi	r24, 1 << FRZCLK
 	sts	_SFR_MEM_ADDR(USBCON), r24
 	sts	_SFR_MEM_ADDR(USBINT), r1
@@ -54,9 +63,18 @@ __reset:
 	 * -nostartfiles, so those copies would sit in flash unused.
 	 * Giving the two loops below the same names satisfies the
 	 * references and keeps libgcc's out of the image.
+	 *
+	 * avr-gcc 使每个含 .data 的目标文件引用 __do_copy_data, 每个含 .bss 的
+	 * 目标文件引用 __do_clear_bss, 预期由 .init4 中的 libgcc 版本提供. 在
+	 * -nostartfiles 之下没有代码跳入 .init4, 那两段代码会闲置在 flash 中.
+	 * 下面两个循环取同样的名字, 既满足引用, 又使 libgcc 的版本不进入映像.
 	 */
 
-	/* Copy .data from flash.  The image is below 64 KiB, so lpm reaches it. */
+	/*
+	 * Copy .data from flash.  The image is below 64 KiB, so lpm reaches it.
+	 *
+	 * 从 flash 复制 .data. 映像小于 64 KiB, lpm 因此能够访问.
+	 */
 	.global	__do_copy_data
 __do_copy_data:
 	ldi	r26, lo8(__data_start)
@@ -71,7 +89,7 @@ __do_copy_data:
 	cpc	r27, r24
 	brne	1b
 
-	/* Zero .bss. */
+	/* zero .bss; 清零 .bss */
 	.global	__do_clear_bss
 __do_clear_bss:
 	ldi	r26, lo8(__bss_start)
@@ -91,6 +109,9 @@ __do_clear_bss:
  * Any vector without a handler ends up here.  The CPU has already
  * cleared the I flag on entry.  Which vector it was is lost, since every
  * unhandled vector is the same weak alias.
+ *
+ * 所有没有处理函数的向量都到达此处. 进入时 CPU 已清除 I 标志. 无法得知是哪个向
+ * 量, 因为所有未处理的向量都是同一个弱别名.
  */
 	.global	__bad_interrupt
 __bad_interrupt:
@@ -106,6 +127,10 @@ __bad_interrupt:
  * stack, and it lies below the boot key.  The arguments stay in r24 and
  * r22, and r1 is cleared for C, since a bad interrupt can arrive with r1
  * in use.
+ *
+ * 调用者的栈可能正是溢出的那个栈, 因此在 panic_halt() 执行任何 C 代码之前把 SP
+ * 移到启动栈. 没有任务使用启动栈, 且启动栈位于启动键之下. 参数保留在 r24 与 r22
+ * 中; r1 为 C 代码清零, 因为意外中断到来时 r1 可能正在使用.
  */
 	.global	panic
 panic:

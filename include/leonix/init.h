@@ -10,6 +10,10 @@
  * scheduler starts, level 1 first, and returns 0 or a negative errno.
  * The pointer to it goes in the section .initcallN.init, which
  * arch/avr/leonix.lds gathers into flash.
+ *
+ * initcall, 仿照 Linux 的 include/linux/init.h. 以下列宏之一指定的函数在调度器
+ * 启动之前由 do_initcalls() 调用一次, 级别 1 最先, 返回 0 或负的 errno. 指向该
+ * 函数的指针放在 .initcallN.init 段中, 由 arch/avr/leonix.lds 汇集到 flash.
  */
 typedef int (*initcall_t)(void);
 

@@ -3,6 +3,10 @@
 # Publish Documentation/ to GitHub Pages on every push to main that
 # touches it.  The build is the same as "make htmldocs", run with -W so
 # that a broken reference fails the job instead of publishing.
+#
+# 每次推送到 main 且改动 Documentation/ 时, 把 Documentation/ 发布到 GitHub
+# Pages. 构建与 "make htmldocs" 相同, 加 -W 运行, 使失效的引用令任务失败而不被发
+# 布.
 
 name: docs
 

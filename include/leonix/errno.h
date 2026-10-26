@@ -2,7 +2,10 @@
 #ifndef _LEONIX_ERRNO_H
 #define _LEONIX_ERRNO_H
 
-/* The numbers are Linux's, include/uapi/asm-generic/errno-base.h. */
+/*
+ * the numbers are Linux's, include/uapi/asm-generic/errno-base.h
+ * 编号取自 Linux 的 include/uapi/asm-generic/errno-base.h
+ */
 #define ENOENT		2
 #define EIO		5
 #define E2BIG		7
@@ -18,6 +21,5 @@
 #define ENOSPC		28
 #define EROFS		30
 #define ENAMETOOLONG	36
-#define ENOSYS		38
 
 #endif /* _LEONIX_ERRNO_H */
