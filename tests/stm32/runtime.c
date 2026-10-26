@@ -135,8 +135,17 @@ asm(".text\n\t.align 1\n\t.thumb_func\n\t.global fault_entry\n"
 
 void reset_handler(void)
 {
+	volatile uint32_t *p;
 	uint32_t i;
 
+	/*
+	 * SRAM keeps its contents across a reset, so a stale nrec left by
+	 * another program would fill the first page at once.
+	 *
+	 * 复位不清除 SRAM, 其他程序留下的 nrec 会使第一页立即被判为写满.
+	 */
+	for (p = __bss_start; p < __bss_end; p++)
+		*p = 0;
 	for (i = 0; i < 4; i++)
 		HDR[i] = 0;
 	HDR[H_MAGIC] = MAGIC;
