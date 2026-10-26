@@ -7,8 +7,8 @@
 Leonix 的 C 与汇编代码遵循 Linux 126ad898a6e9 (v7.3-16337, 7.4 合并窗口
 期间的主线) 的 Documentation/process/coding-style.rst, 本文只列出在其之上
 增加的规则. 增加的规则多数来自 Leonix 运行的环境: avr-gcc 的 int 为 16 位,
-中断与任务共享 2.5 KiB SRAM, 文件存放在可能随时断电的 EEPROM 上. Linux 的规则在 Linux
-内核中有缺省成立的前提, 这些前提在 ATmega32U4 上并不成立.
+中断与任务共享 2.5 KiB SRAM, 文件存放在可能随时断电的 EEPROM 上. Linux 的规则
+在 Linux 内核中有缺省成立的前提, 这些前提在 ATmega32U4 上并不成立.
 
 规则的写法以工具能够检查为先. 只能由人检查的规则在各节中注明.
 
@@ -30,6 +30,12 @@ scripts/checkpatch.pl, 选项在 .checkpatch.conf 中. 该文件关闭了六类�
 strscpy() 以及 READ_ONCE(). 其余检查与 Linux 相同, 警告与错误同样需要处理.
 scripts/kconfig 与 include/leonix/kconfig.h 中的宏是原样导入的 Linux 代码,
 不在检查之列; checkpatch.pl 对 Linux 自身的这些宏同样报告警告.
+
+checkstyle.sh 另外运行两项检查. scripts/kernel-doc 是 Linux 在 683e8cbaba7f
+删除 Perl 版本之前的最后一版, 即 de258fa8ca8d 中的 scripts/kernel-doc.pl, 以
+``-none -Wall`` 检查 kernel-doc 注释与函数声明是否一致. scripts/checkwidth.py
+检查含中文的行: checkpatch.pl 按字符计数, 一个汉字在终端中却占两列, 该脚本按
+显示宽度计算, 上限为 80 列.
 
 
 文件开头
@@ -127,4 +133,4 @@ avr-libc 自身的函数不遵循这一约定.
 现状
 ====
 
-2026-10-26 在 feature/checkstyle 上, checkstyle.sh 报告 0 个错误与 0 个警告.
+2026-10-26 在 feature/comment-style 上, checkstyle.sh 的三项检查均无报告.
