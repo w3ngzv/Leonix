@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * A terminal in canonical mode, the part of Linux's n_tty line discipline
- * that a command line needs.  The driver below moves raw bytes; readers
- * above get whole lines.
+ * a command line needs.  The driver below moves raw bytes; readers get
+ * whole lines.
  *
- * Input: keys are echoed as they arrive, backspace and DEL take back the
- * last character, Enter ends the line as '\n' whether the terminal sends
- * CR, LF or CR LF (ICRNL), and Ctrl-C drops the line.  With no signals,
- * a dropped line reads as an empty one.  Output: '\n' goes out as CR LF
- * (ONLCR).
+ * Input is echoed as it arrives.  Backspace and DEL erase a character,
+ * CR, LF or CR LF end the line as '\n' (ICRNL), and Ctrl-C drops the
+ * line, which then reads as empty.  Output '\n' goes out as CR LF
+ * (ONLCR).  There is one terminal, on the board's one serial port.
  *
- * There is one terminal, on the one serial port the board has.
+ * 规范模式的终端, 即 Linux n_tty 行规程中命令行所需的部分. 下层驱动收发
+ * 原始字节, 上层读者得到整行.
+ *
+ * 输入随到随回显. 退格与 DEL 删去一个字符, CR、LF 或 CR LF 都以 '\n'
+ * 结束一行 (ICRNL), Ctrl-C 丢弃该行, 读者随后读到空行. 输出的 '\n' 以
+ * CR LF 发出 (ONLCR). 板上只有一个串口, 因此只有一个终端.
  */
 #include <stddef.h>
 #include <string.h>
@@ -31,7 +35,7 @@ static void echo(const char *s, uint8_t len)
 	tty_raw->write(NULL, s, len);
 }
 
-/* Fill tty_line with the next line from the terminal. */
+/* fill tty_line with the next line; 从终端读入下一行, 存入 tty_line */
 static void tty_get_line(void)
 {
 	static char last;
@@ -61,7 +65,7 @@ static void tty_get_line(void)
 			}
 			continue;
 		}
-		/* Room is kept for the '\n'. */
+		/* keep room for the '\n'; 为 '\n' 留出位置 */
 		if (c < ' ' || len == TTY_LINE - 1)
 			continue;
 		tty_line[len++] = c;
@@ -73,8 +77,11 @@ static void tty_get_line(void)
 }
 
 /*
- * Return the rest of the current line, at most @count bytes of it,
- * reading a new line first if none is left.  Only one task may read.
+ * The rest of the current line, at most @count bytes of it, after reading
+ * a new line if none is left.  Only one task may read.
+ *
+ * 返回当前行余下的部分, 至多 @count 字节; 当前行已读完时先读入新的一行.
+ * 只允许一个任务读取.
  */
 static int tty_read(struct file *f, char *buf, uint8_t count)
 {
@@ -112,10 +119,18 @@ static const struct file_operations tty_fops = {
 	.write = tty_write,
 };
 
-/*
- * Put the line discipline over @raw and register the result as @name, a
- * string in flash.  @raw is called with no struct file.  Returns -1 if a terminal exists already or the
- * device table is full.
+/**
+ * tty_register() - put the line discipline over a raw device
+ * @name: the terminal's name in /dev, a string in flash
+ * @raw: the device, whose operations are called with no struct file
+ *
+ * 在原始设备 @raw 之上加上行规程, 以 @name 注册到 /dev. @name 是 flash
+ * 中的字符串, @raw 的各项操作在调用时不带 struct file.
+ *
+ * Context: before sched_start().  在 sched_start() 之前调用.
+ * Return: 0, -1 if a terminal exists already, or -ENOSPC if the device
+ * table is full.  成功时返回 0, 已有终端时返回 -1, 设备表已满时返回
+ * -ENOSPC.
  */
 int tty_register(const char *name, const struct file_operations *raw)
 {
