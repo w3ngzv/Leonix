@@ -159,6 +159,16 @@ ST-TN1433-rev7.pdf
 
   https://www.st.com.cn/resource/en/technical_note/tn1433-reference-device-marking-schematics-for-stm32-microcontrollers-and-microprocessors-stmicroelectronics.pdf
 
+下列 ST 文档与 STM32F103 的板级设计有关, 2026-10-26 未能取得: st.com 与
+st.com.cn 对脚本请求无响应. Documentation/stm32f103.rst 不引用这些文档.
+
+  AN2586 Getting started with STM32F10xxx hardware development (电源、
+  复位、BOOT 引脚与调试接口的参考设计); AN2606 STM32 microcontroller
+  system memory boot mode (内置 bootloader 的协议与引脚); AN2868
+  STM32F10xxx internal RC oscillator (HSI) calibration (DS5319 表 24 的
+  注 2 指向该文档); UM1075 ST-LINK/V2 in-circuit debugger/programmer
+  (原厂 ST-LINK/V2 的接口); RM0008 的现行修订版 Rev 21.
+
 Arm-CoreSight-IHI0029F.pdf
   Arm, CoreSight Architecture Specification v3.0, ARM IHI 0029F, 2022 年
   2 月. B2.2 节规定 PIDR 中 JEP106 代码的位置: DES_0 为 PIDR1[7:4],
@@ -290,3 +300,17 @@ LUFA-111009
   USBController_AVR8.h 与 USBInterrupt_AVR8.c.
 
   https://github.com/abcminiuser/lufa/tree/LUFA-111009
+
+QEMU 11.1.2 的 stm32vldiscovery
+  qemu-project/qemu 仓库 v11.1.2 标签下的 docs/system/arm/stm32.rst 与
+  hw/arm/stm32f100_soc.c, 2026-10-26 读取, SHA-256 分别为
+  1d75130bf0a21de178b70d4c1fc2159a132829a56e152592a8306597a2638157 与
+  0e708cafe1ddf26f6a6261a9512c9131bb603371c06f0ab761fa17c1473fcb44.
+  前者称该机型的芯片为 STM32F100RBT6. 后者把三个 USART 与两个 SPI 建成
+  实际的设备, 其余外设 (定时器、RTC、BKP、PWR、GPIO、ADC、DMA、CRC、
+  RCC 等) 均由 create_unimplemented_device() 建成占位区域; 文档的
+  "Supported devices" 一节所列的 ADC 与定时器对该机型并不成立.
+  tests/stm32 与 Documentation/stm32f103.rst 依此划分哪些检查能在 QEMU
+  中运行.
+
+  https://gitlab.com/qemu-project/qemu/-/blob/v11.1.2/hw/arm/stm32f100_soc.c
