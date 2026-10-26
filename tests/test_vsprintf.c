@@ -3,6 +3,10 @@
  * Host test of lib/vsprintf.c, run by "make check".  The formatter has
  * no AVR dependency apart from reading the format string from flash,
  * which include/leonix/kernel.h maps to an ordinary read off the AVR.
+ *
+ * lib/vsprintf.c 的主机测试, 由 "make check" 运行. 该格式化代码除了从 flash 读
+ * 取格式串之外不依赖 AVR, 而 include/leonix/kernel.h 在 AVR 以外把该读取映射为
+ * 普通的内存读取.
  */
 #include <stdio.h>
 #include <string.h>
@@ -10,7 +14,11 @@
 
 static int fails;
 
-/* snprintk() into a buffer of @size must give @exp and return its length. */
+/*
+ * snprintk() into a buffer of @size must give @exp and return its length.
+ *
+ * 写入大小为 @size 的缓冲区时, snprintk() 必须得到 @exp, 并返回其长度.
+ */
 #define T(exp, size, fmt, ...) do {					\
 	char b[64];							\
 	uint8_t n = snprintk(b, size, fmt, ##__VA_ARGS__);		\

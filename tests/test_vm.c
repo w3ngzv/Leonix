@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Host test of kernel/vm.c, run by "make check".  The programs in
- * tests/vm/ are assembled by tools/lxasm.py first; this runs them with a
- * file in memory and a write() that captures the output.
+ * tests/vm/ are first assembled by lxasm.py from Leonix_toolchain; the
+ * test runs them with a file in memory and a write() that captures the
+ * output.
+ *
+ * kernel/vm.c 的主机测试, 由 "make check" 运行. tests/vm/ 中的程序先由
+ * Leonix_toolchain 的 lxasm.py 汇编; 本测试以内存中的文件和一个捕获输出的
+ * write() 运行这些程序.
  */
 #include <stdio.h>
 #include <string.h>
@@ -21,7 +26,7 @@ static int16_t fetch(struct vm *vm, uint16_t off)
 	return off < image_len ? image[off] : -1;
 }
 
-/* exit and write are all the test programs use. */
+/* exit and write are all the test programs use; 测试程序只用到 exit 与 write */
 static uint8_t sys(struct vm *vm, uint8_t nr)
 {
 	int16_t fd, buf, count, b;
@@ -93,7 +98,10 @@ int main(void)
 	if (vm.status != 8)
 		printf("arith failed check %d\n", vm.status);
 
-	/* fault.s takes the fault number as argc - 1 */
+	/*
+	 * fault.s takes the fault number as argc - 1
+	 * fault.s 以 argc - 1 作为故障编号
+	 */
 	{
 		const char *const a2[] = { "f", "x", NULL };
 		const char *const a3[] = { "f", "x", "x", NULL };
@@ -106,7 +114,7 @@ int main(void)
 		CHECK(run("tests/vm/fault.lx", 5, a5, &vm) == VM_BAD_ADDRESS);
 	}
 
-	/* a bad header is refused */
+	/* a bad header is refused; 拒绝错误的文件头 */
 	memset(&vm, 0, sizeof(vm));
 	vm.ops = &ops;
 	memcpy(image, "XX\1\0\0\0", 6);
