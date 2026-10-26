@@ -2,6 +2,8 @@
 #
 # Makefile for the device drivers.
 #
+# 设备驱动的 Makefile.
+#
 
 obj-y += tty.o eeprom.o
 obj-$(CONFIG_HD44780) += lcd.o

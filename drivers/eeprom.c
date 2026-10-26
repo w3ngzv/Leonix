@@ -2,12 +2,15 @@
 /*
  * The on-chip EEPROM as the device under lxfs.
  *
- * avr-libc's routines wait on EEPE with interrupts as the caller had
- * them, and disable them only for the two timed writes of EEMPE and EEPE
- * (seen in the avr-libc 2.0 disassembly of eeprom_update_r18).  The
- * caller spins about 3.3 ms per byte written, datasheet table 5-3,
- * while other tasks still run.  eeprom_update_block() skips bytes that already
- * hold the value, which saves both the time and the wear.
+ * avr-libc disables interrupts only for the timed EEMPE and EEPE writes
+ * (avr-libc 2.0, eeprom_update_r18), so other tasks run while the caller
+ * spins on EEPE, about 3.3 ms a byte (datasheet table 5-3).
+ * eeprom_update_block() skips bytes that already hold the value.
+ *
+ * 片上 EEPROM, 作为 lxfs 之下的设备. avr-libc 只在定时写入 EEMPE 与 EEPE
+ * 的两条指令期间关中断 (avr-libc 2.0, eeprom_update_r18), 调用者在 EEPE
+ * 上忙等时其他任务照常运行, 每写一个字节约 3.3 ms (数据手册表 5-3).
+ * eeprom_update_block() 跳过已是目标值的字节.
  */
 #include <avr/eeprom.h>
 
@@ -25,7 +28,10 @@ static void eeprom_dev_write(uint16_t off, const void *buf, uint16_t len)
 	eeprom_update_block(buf, (void *)off, len);
 }
 
-/* Mount lxfs on the EEPROM, formatting it if it holds none. */
+/*
+ * mount lxfs on the EEPROM, formatting it if it holds none
+ * 在 EEPROM 上挂载 lxfs, 其中没有 lxfs 时先格式化
+ */
 static int eeprom_fs_init(void)
 {
 	switch (lxfs_init(eeprom_dev_read, eeprom_dev_write)) {
