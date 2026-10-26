@@ -14,6 +14,9 @@
  * The calls a program makes, named and numbered as in Linux.  There are
  * no processes, so there is one table of descriptors, the shell's, and
  * the programs it runs share it.
+ *
+ * 程序发出的调用, 名称与编号同 Linux. 没有进程, 因此只有一张描述符表, 即 shell
+ * 的描述符表, shell 运行的程序共用该表.
  */
 int open(const char *path, uint16_t flags);
 int close(int fd);
