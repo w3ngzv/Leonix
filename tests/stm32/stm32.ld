@@ -13,7 +13,11 @@ SECTIONS
 		*(.text*)
 		*(.rodata*)
 	}
-	.bss 0x20000000 (NOLOAD) : { *(.bss*) *(COMMON) }
+	.bss 0x20000000 (NOLOAD) : {
+		__bss_start = .;
+		*(.bss*) *(COMMON)
+		__bss_end = .;
+	}
 	ASSERT(SIZEOF(.bss) <= 0x40, "tests/stm32: .bss overlaps the bit-band word")
 	/DISCARD/ : { *(.data*) *(.ARM.*) *(.comment) }
 }

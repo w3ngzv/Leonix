@@ -50,6 +50,8 @@ enum { H_MAGIC, H_STATE, H_COUNT, H_FAULTS };
 #define HSI_HZ		8000000u
 
 extern uint32_t last_cfsr, last_hfsr;
+/* from stm32.ld; 由 stm32.ld 定义 */
+extern uint32_t __bss_start[], __bss_end[];
 
 void suite_main(void);
 void reset_handler(void);
