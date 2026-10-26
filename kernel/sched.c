@@ -40,7 +40,7 @@
 #define IDLE_STACK_SIZE	72
 
 /* idle() itself needs task_exit()'s return address and a 2-byte frame. */
-_Static_assert(IDLE_STACK_SIZE >= TASK_STACK_RESERVE + 4,
+_Static_assert(TASK_STACK_RESERVE + 4 <= IDLE_STACK_SIZE,
 	       "idle stack too small for the switch frame");
 
 static struct task tasks[MAX_TASKS];
@@ -53,8 +53,6 @@ static uint32_t idle_ticks;
 
 struct task *current;
 
-extern void arch_start_first_task(void) __attribute__((noreturn));
-extern void arch_yield(void);
 
 /*
  * An entry function that returns lands here, see task_init().  The task

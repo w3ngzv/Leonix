@@ -47,7 +47,7 @@ struct task {
 extern struct task *current;
 
 int task_create(void (*entry)(void), uint8_t *stack, uint16_t size);
-void sched_start(void) __attribute__((noreturn));
+_Noreturn void sched_start(void);
 void scheduler_tick(void);
 void schedule(void);
 void sleep_until(uint32_t deadline);
@@ -55,5 +55,9 @@ void msleep(uint16_t ms);
 uint32_t sched_idle_ticks(void);
 uint16_t sched_stack_free(uint8_t index);
 uint8_t sched_task_state(uint8_t index);
+
+/* arch/avr/switch.S, for kernel/sched.c only. */
+_Noreturn void arch_start_first_task(void);
+void arch_yield(void);
 
 #endif /* _LEONIX_SCHED_H */

@@ -30,6 +30,7 @@
 #include <string.h>
 #include <util/delay.h>
 
+#include <leonix/array_size.h>
 #include <leonix/fs.h>
 #include <leonix/kernel.h>
 #include <leonix/module.h>
@@ -98,7 +99,7 @@ static const struct swd_word swd_words[] PROGMEM = {
 	{ "OPT1  ", 0x1ffff804UL },
 };
 
-#define NR_SWD_WORDS	(sizeof(swd_words) / sizeof(swd_words[0]))
+#define NR_SWD_WORDS	ARRAY_SIZE(swd_words)
 
 /*
  * The line after swd_words[] decodes the ROM table's PIDR into the
