@@ -7,8 +7,8 @@ Usage:
     stm32test.py --stlink ELF        flash and run on a board through ST-LINK
 
 The suite is chosen by the ELF name: isa.elf is checked by isa_check.py,
-periph.elf by periph_check.py.  signal.elf is not run here, see
-signal_check.py.
+periph.elf by periph_check.py, crcreset.elf by crcreset_check.py.
+signal.elf is not run here, see signal_check.py.
 
 The target writes records to SRAM and the host reads them through a
 debugger: the GDB stub of QEMU, or the Tcl port of OpenOCD.
@@ -16,7 +16,8 @@ debugger: the GDB stub of QEMU, or the Tcl port of OpenOCD.
 运行 tests/stm32 中的一个程序并检查其记录.
 
 用法见上. 测试组按 ELF 文件名选择: isa.elf 由 isa_check.py 检查, periph.elf 由
-periph_check.py 检查. signal.elf 不在此处运行, 见 signal_check.py.
+periph_check.py 检查, crcreset.elf 由 crcreset_check.py 检查. signal.elf 不在
+此处运行, 见 signal_check.py.
 
 目标把记录写入 SRAM, 主机经调试器读取: QEMU 的 GDB 桩, 或 OpenOCD 的 Tcl 端口.
 """
