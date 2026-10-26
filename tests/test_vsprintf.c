@@ -7,10 +7,23 @@
 #include <stdio.h>
 #include <string.h>
 #include <leonix/kernel.h>
+
 static int fails;
-#define T(exp, size, fmt, ...) do { char b[64]; uint8_t n = snprintk(b, size, fmt, ##__VA_ARGS__); \
-	if (strcmp(b, exp) || n != strlen(exp)) { printf("FAIL %-18s got [%s] n=%u want [%s]\n", fmt, b, n, exp); fails++; } } while (0)
-int main(void) {
+
+/* snprintk() into a buffer of @size must give @exp and return its length. */
+#define T(exp, size, fmt, ...) do {					\
+	char b[64];							\
+	uint8_t n = snprintk(b, size, fmt, ##__VA_ARGS__);		\
+									\
+	if (strcmp(b, exp) || n != strlen(exp)) {			\
+		printf("FAIL %-18s got [%s] n=%u want [%s]\n",		\
+		       fmt, b, n, exp);					\
+		fails++;						\
+	}								\
+} while (0)
+
+int main(void)
+{
 	T("idle  99%", 64, "idle %3u%%", 99);
 	T("  0", 64, "%3u", 0);
 	T("-5", 64, "%d", -5);

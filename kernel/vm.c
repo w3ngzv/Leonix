@@ -235,9 +235,15 @@ uint8_t vm_run(struct vm *vm)
 			b = vm_pop(vm);
 			a = vm_pop(vm);
 			switch (op) {
-			case OP_ADD: a += b; break;
-			case OP_SUB: a -= b; break;
-			case OP_MUL: a *= b; break;
+			case OP_ADD:
+				a += b;
+				break;
+			case OP_SUB:
+				a -= b;
+				break;
+			case OP_MUL:
+				a *= b;
+				break;
 			case OP_DIVU:
 			case OP_MODU:
 				if (!b) {
@@ -247,14 +253,30 @@ uint8_t vm_run(struct vm *vm)
 				a = op == OP_DIVU ? (uint16_t)a / (uint16_t)b
 						  : (uint16_t)a % (uint16_t)b;
 				break;
-			case OP_AND: a &= b; break;
-			case OP_OR: a |= b; break;
-			case OP_XOR: a ^= b; break;
-			case OP_SHL: a = (uint16_t)a << (b & 15); break;
-			case OP_SHR: a = (uint16_t)a >> (b & 15); break;
-			case OP_EQ: a = a == b; break;
-			case OP_LT: a = a < b; break;
-			case OP_ULT: a = (uint16_t)a < (uint16_t)b; break;
+			case OP_AND:
+				a &= b;
+				break;
+			case OP_OR:
+				a |= b;
+				break;
+			case OP_XOR:
+				a ^= b;
+				break;
+			case OP_SHL:
+				a = (uint16_t)a << (b & 15);
+				break;
+			case OP_SHR:
+				a = (uint16_t)a >> (b & 15);
+				break;
+			case OP_EQ:
+				a = a == b;
+				break;
+			case OP_LT:
+				a = a < b;
+				break;
+			case OP_ULT:
+				a = (uint16_t)a < (uint16_t)b;
+				break;
 			}
 			vm_push(vm, a);
 			break;

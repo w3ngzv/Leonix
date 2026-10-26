@@ -72,8 +72,12 @@ static uint8_t run(const char *path, int argc, char *const argv[], struct vm *vm
 	return vm_run(vm);
 }
 
-#define CHECK(cond) do { if (!(cond)) { \
-	printf("FAIL line %d: %s\n", __LINE__, #cond); fails++; } } while (0)
+#define CHECK(cond) do {						\
+	if (!(cond)) {							\
+		printf("FAIL line %d: %s\n", __LINE__, #cond);		\
+		fails++;						\
+	}								\
+} while (0)
 
 int main(void)
 {
