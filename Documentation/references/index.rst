@@ -159,6 +159,36 @@ ST-TN1433-rev7.pdf
 
   https://www.st.com.cn/resource/en/technical_note/tn1433-reference-device-marking-schematics-for-stm32-microcontrollers-and-microprocessors-stmicroelectronics.pdf
 
+STM32F103x4x6-datasheet-DocID15060-rev7.pdf
+  STMicroelectronics, STM32F103x4, STM32F103x6 低容量数据手册, DocID15060
+  Rev 7, 2015 年 6 月. 表 2 给出 C4、C6 的 Flash (16、32 KB) 与 SRAM
+  (6、10 KB), 以及只有两个通用定时器与两个 USART; 第 7 节订货代码中
+  4 为 16 KB, 6 为 32 KB. 文件中只有 DocID, 没有 DSxxxx 形式的编号.
+  st.com 与 st.com.cn 对脚本请求无响应, 2026-10-26 取自 Internet Archive.
+  现行修订版未取得. SHA-256
+  31ab1fe3de6e6cf3e97ce9a2329794edc012d7e6ec52f8a69af672562d8363cd.
+
+  https://www.st.com/resource/en/datasheet/stm32f103c6.pdf
+
+stm32f1xx-hal-driver-v1.1.10/
+  STMicroelectronics, STM32CubeF1 HAL 驱动 V1.1.10 (2024-07-22) 中的
+  stm32f1xx_hal_crc.c、stm32f1xx_hal_crc.h、stm32f1xx_hal_rcc.h, 以及
+  Release_Notes.html 与 LICENSE.md (BSD 3-Clause). HAL_CRC_Calculate()
+  先以 __HAL_CRC_DR_RESET() 置 CR 的 RESET 位, 再逐字写入 DR;
+  __HAL_RCC_xxx_CLK_ENABLE() 写入时钟使能位之后读回一次, 注释为 "Delay
+  after an RCC peripheral clock enabling". Documentation/stm32f103.rst 的
+  CRC 一节与 tests/stm32/crcreset.c 以此为对照. 2026-10-26 取自 GitHub
+  标签 v1.1.10. SHA-256:
+
+  - stm32f1xx_hal_crc.c
+    632731cf473ad8d280d5370b07dcaac1ddd69a77218628a59eb2debad7365374
+  - stm32f1xx_hal_crc.h
+    e2af098d3c779777dbe668b6cf51ae0d130e6fd49872b926d4767c8587c86337
+  - stm32f1xx_hal_rcc.h
+    8bf099bedb0c4fa035df81520f99e289464293b27e71d7e8759c8d5160ce8ac1
+
+  https://github.com/STMicroelectronics/stm32f1xx-hal-driver/tree/v1.1.10
+
 下列 ST 文档与 STM32F103 的板级设计有关, 2026-10-26 未能取得: st.com 与
 st.com.cn 对脚本请求无响应. Documentation/stm32f103.rst 不引用这些文档.
 
