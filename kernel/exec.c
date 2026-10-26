@@ -41,7 +41,7 @@ static uint8_t depth;
  */
 static char path_buf[PATH_MAX];
 static char arg_buf[ARG_BUF];
-static char *arg_ptrs[MAX_ARGS + 1];
+static const char *arg_ptrs[MAX_ARGS + 1];
 
 static int16_t proc_fetch(struct vm *vm, uint16_t off)
 {
@@ -119,7 +119,7 @@ static int __attribute__((noinline)) sys_write(struct vm *vm, int fd, uint16_t a
 static int sys_exec(struct vm *vm, int argc, uint16_t argv_addr)
 {
 	char *buf = arg_buf;
-	char **argv = arg_ptrs;
+	const char **argv = arg_ptrs;
 	uint8_t used = 0;
 	int16_t lo, hi;
 	int i;
@@ -215,7 +215,7 @@ static const struct vm_ops proc_ops = {
  * 128 plus the fault if it faulted, or a negative errno if it could not
  * be started.  A name without '/' is looked for in /bin.
  */
-int exec(int argc, char **argv)
+int exec(int argc, const char *const argv[])
 {
 	char *path = path_buf;
 	struct proc *p;

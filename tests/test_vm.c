@@ -62,7 +62,8 @@ static int load(const char *path)
 	return 0;
 }
 
-static uint8_t run(const char *path, int argc, char *const argv[], struct vm *vm)
+static uint8_t run(const char *path, int argc, const char *const argv[],
+		   struct vm *vm)
 {
 	memset(vm, 0, sizeof(*vm));
 	vm->ops = &ops;
@@ -82,7 +83,7 @@ static uint8_t run(const char *path, int argc, char *const argv[], struct vm *vm
 int main(void)
 {
 	static struct vm vm;
-	char *argv[] = { "fault", NULL };
+	const char *const argv[] = { "fault", NULL };
 	uint8_t r;
 
 	r = run("tests/vm/arith.lx", 1, argv, &vm);
@@ -94,10 +95,10 @@ int main(void)
 
 	/* fault.s takes the fault number as argc - 1 */
 	{
-		char *a2[] = { "f", "x", NULL };
-		char *a3[] = { "f", "x", "x", NULL };
-		char *a4[] = { "f", "x", "x", "x", NULL };
-		char *a5[] = { "f", "x", "x", "x", "x", NULL };
+		const char *const a2[] = { "f", "x", NULL };
+		const char *const a3[] = { "f", "x", "x", NULL };
+		const char *const a4[] = { "f", "x", "x", "x", NULL };
+		const char *const a5[] = { "f", "x", "x", "x", "x", NULL };
 
 		CHECK(run("tests/vm/fault.lx", 2, a2, &vm) == VM_BAD_ADDRESS);
 		CHECK(run("tests/vm/fault.lx", 3, a3, &vm) == VM_STACK);

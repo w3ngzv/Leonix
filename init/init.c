@@ -20,8 +20,7 @@
 
 static void init_task(void)
 {
-	static char sh[] = "sh";
-	static char *argv[] = { sh, NULL };
+	static const char *const argv[] = { "sh", NULL };
 	int status;
 
 	for (;;) {
