@@ -1,4 +1,5 @@
 ; Each entry point makes one fault; the runner picks one by argc, 2 to 5.
+; 每个入口点产生一种故障; 运行者按 argc (2 至 5) 选择入口.
 	.data buf 2
 
 	drop			; argv, leaving argc

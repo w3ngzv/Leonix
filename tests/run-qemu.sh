@@ -4,6 +4,10 @@
 # run-qemu.sh QEMU TIMEOUT ELF: run a test on an emulated ATmega2560 and
 # pass if it prints "all passed".  A finished test spins in exit(), so
 # QEMU is stopped once a result line appears, or after TIMEOUT seconds.
+#
+# run-qemu.sh QEMU TIMEOUT ELF: 在模拟的 ATmega2560 上运行测试, 输出 "all
+# passed" 即为通过. 测试结束后在 exit() 中空转, 因此出现结果行或经过 TIMEOUT 秒
+# 后停止 QEMU.
 qemu=$1 timeout=$2 elf=$3
 out=$(mktemp)
 trap 'rm -f "$out"' EXIT
