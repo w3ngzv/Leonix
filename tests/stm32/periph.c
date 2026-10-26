@@ -347,7 +347,7 @@ static uint32_t pattern(uint32_t i)
 
 static void check_crc_dma(void)
 {
-	uint32_t i, bad = 0, ok;
+	uint32_t i, bad = 0, ok, crc_wait;
 	static const uint32_t src[NR_DMA_WORDS] = {
 		0x00000000, 0xffffffff, 0x55555555, 0xaaaaaaaa,
 		0x01234567, 0x89abcdef, 0xdeadbeef, 0x0badf00d,
@@ -361,9 +361,19 @@ static void check_crc_dma(void)
 
 	RCC_AHBENR |= AHB_CRC | AHB_DMA1;
 	CRC_CR = 1;			/* RESET */
+	/*
+	 * On the board tested on 2026-10-26 a read right after RESET still
+	 * returns the old value, and a word written that early is lost.
+	 * RM0008 4.4.3 and ES096 give no delay, so wait for 0xffffffff.
+	 *
+	 * 2026-10-26 测试的板子在 RESET 之后立即读取, 读到的仍是旧值, 此时写入
+	 * 的字会丢失. RM0008 4.4.3 与 ES096 都没有给出延迟, 因此等待读出
+	 * 0xffffffff.
+	 */
+	crc_wait = wait_set(0x40023000u, 0xffffffffu, 0xffffffffu, WAIT_LONG);
 	for (i = 0; i < NR_CRC_WORDS; i++)
 		CRC_DR = pattern(i);
-	rec(P_CRC, NR_CRC_WORDS, 0, 0, CRC_DR, 0);
+	rec(P_CRC, NR_CRC_WORDS, crc_wait, 0, CRC_DR, 0);
 
 	for (i = 0; i < NR_DMA_WORDS; i++)
 		DMA_DST[i] = 0;
