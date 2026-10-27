@@ -204,6 +204,17 @@ static uint8_t log_head, log_phase;
  * 个标记. log_append() 负责使两者保持一致.
  */
 static uint8_t cache_index, cache_slot;
+/*
+ * Block pos_nth of the file of entry pos_index is pos_block, as
+ * block_at() last found it; pos_index is LXFS_FREE when nothing is
+ * known.  An append only links blocks after the last, so the blocks a
+ * file already has keep their place until free_chain() gives them back.
+ *
+ * 目录项 pos_index 的文件中第 pos_nth 块为 pos_block, 即 block_at() 上次找到
+ * 的结果; 无记录时 pos_index 为 LXFS_FREE. 追加只在最后一块之后链接新块, 因此
+ * 文件已有的块在 free_chain() 归还之前位置不变.
+ */
+static uint8_t pos_index, pos_nth, pos_block;
 
 static uint8_t fat_get(uint8_t block)
 {
@@ -388,6 +399,7 @@ static void free_chain(uint8_t block)
 {
 	uint8_t next;
 
+	pos_index = LXFS_FREE;
 	while (block != LXFS_FREE && block != LXFS_END) {
 		next = fat_get(block);
 		fat_set(block, LXFS_FREE);
@@ -438,10 +450,36 @@ static const char *rest_to_name(const char *rest, int *err)
 	return name;
 }
 
+/*
+ * Block @n of the file of entry @index, whose first block is @first;
+ * the file must have that many blocks.  The walk starts from pos_block
+ * when it lies in the same file at or before @n, so that code fetched in
+ * order takes at most one step per byte rather than a walk from @first.
+ *
+ * 目录项 @index 的文件 (首块为 @first) 中的第 @n 块; 该文件必须有这么多块. 若
+ * pos_block 位于同一文件中第 @n 块或其之前, 从 pos_block 开始查找, 按顺序取指
+ * 时每个字节因此至多前进一步, 不必从 @first 沿链走起.
+ */
+static uint8_t block_at(uint8_t index, uint8_t first, uint8_t n)
+{
+	uint8_t block = first, i = 0;
+
+	if (index == pos_index && n >= pos_nth) {
+		block = pos_block;
+		i = pos_nth;
+	}
+	for (; i < n; i++)
+		block = fat_get(block);
+	pos_index = index;
+	pos_nth = n;
+	pos_block = block;
+	return block;
+}
+
 static int lxfs_read(struct file *f, char *buf, uint8_t count)
 {
 	struct lxfs_dirent de;
-	uint16_t size, skip;
+	uint16_t size;
 	uint8_t block, off, n, done = 0;
 
 	dirent_get(f->private_data, &de);
@@ -451,9 +489,7 @@ static int lxfs_read(struct file *f, char *buf, uint8_t count)
 	if (count > size - f->f_pos)
 		count = size - f->f_pos;
 
-	block = de.first;
-	for (skip = f->f_pos / LXFS_BLOCK; skip; skip--)
-		block = fat_get(block);
+	block = block_at(f->private_data, de.first, f->f_pos / LXFS_BLOCK);
 	off = f->f_pos % LXFS_BLOCK;
 	while (done < count) {
 		n = LXFS_BLOCK - off;
@@ -594,9 +630,7 @@ static int16_t lxfs_peek(struct file *f, uint16_t off)
 	dirent_get(f->private_data, &de);
 	if (off >= dirent_size(&de))
 		return -1;
-	block = de.first;
-	for (b = off / LXFS_BLOCK; b; b--)
-		block = fat_get(block);
+	block = block_at(f->private_data, de.first, off / LXFS_BLOCK);
 	dev_read(block * LXFS_BLOCK + off % LXFS_BLOCK, &b, 1);
 	return b;
 }
@@ -1004,6 +1038,7 @@ int lxfs_init(lxfs_read_fn read, lxfs_write_fn write)
 	dev_write = write;
 	mounted = 0;
 	cache_index = LXFS_FREE;
+	pos_index = LXFS_FREE;
 	dev_read(SB_OFF, sb, sizeof(sb));
 	if (!memcmp(sb, lxfs_magic, sizeof(lxfs_magic))) {
 		ret = LXFS_CLEAN;
