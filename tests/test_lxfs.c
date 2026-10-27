@@ -49,6 +49,12 @@ static int fails;
  */
 static long budget = -1;
 static jmp_buf reset_point;
+/*
+ * leave the byte a reset interrupts erased to 0xff, as an EEPROM write
+ * erases the byte before programming it
+ * 使复位所打断的字节停在擦除后的 0xff; EEPROM 写入一个字节时先擦除再编程
+ */
+static int erase_interrupted;
 
 static void ee_read(uint16_t off, void *buf, uint16_t len)
 {
@@ -66,8 +72,11 @@ static void ee_write(uint16_t off, const void *buf, uint16_t len)
 
 	for (i = 0; i < len; i++) {
 		if (eeprom[off + i] != p[i]) {
-			if (budget == 0)
+			if (budget == 0) {
+				if (erase_interrupted)
+					eeprom[off + i] = 0xff;
 				longjmp(reset_point, 1);
+			}
 			if (budget > 0)
 				budget--;
 			eeprom[off + i] = p[i];
@@ -623,6 +632,199 @@ static void repair_tests(void)
 	CHECK(fs_open(&f, "/\xff", O_WRONLY | O_CREAT) == -EINVAL);
 }
 
+#ifndef __AVR__
+/*
+ * Random appends, rewrites and unlinks on a few files, checked against a
+ * copy of what each file should hold.  About one operation in three is
+ * cut by a reset, which may come again during the repairing mount, and
+ * half the resets leave the interrupted byte erased.  Each file must
+ * hold its contents from before or after the operation, peek() must
+ * agree with read(), and a second mount must find nothing to repair.
+ * The model needs more SRAM than the ATmega2560 of "make check-qemu"
+ * has left, so it runs on the host only.
+ *
+ * 对几个文件随机执行追加、改写与删除, 并与记录各文件应有内容的副本比对. 约三
+ * 分之一的操作被复位打断, 复位也可能在修复性的挂载期间再次发生, 其中一半的复位
+ * 使被打断的字节停在擦除状态. 每个文件必须保存操作之前或之后的内容, peek() 必须
+ * 与 read() 一致, 第二次挂载不得再发现需要修复之处. 该模型所需的 SRAM 超出
+ * "make check-qemu" 所用 ATmega2560 的余量, 因此只在主机上运行.
+ */
+#define MODEL_FILES	6
+#define MODEL_SEEDS	1000
+#define MODEL_OPS	400
+#define MODEL_CHUNK	64
+
+enum { M_APPEND, M_REWRITE, M_UNLINK, M_KINDS };
+
+static const char *const model_names[MODEL_FILES] = {
+	"/m0", "/m1", "/m2", "/m3", "/m4", "/m5",
+};
+static char model_data[MODEL_FILES][DATA_BYTES];
+/* -1: no such file; -1 表示文件不存在 */
+static int model_len[MODEL_FILES];
+static uint32_t model_seed;
+static int m_kind, m_file, m_len, m_split;
+static char m_buf[MODEL_CHUNK];
+
+/*
+ * xorshift32, so that a seed gives the same run with any C library
+ * xorshift32, 使同一种子在任何 C 库上得到相同的运行
+ */
+static uint32_t model_rand(void)
+{
+	model_seed ^= model_seed << 13;
+	model_seed ^= model_seed >> 17;
+	model_seed ^= model_seed << 5;
+	return model_seed;
+}
+
+/*
+ * The operation opens file m_file once and writes m_buf in two calls,
+ * split at m_split, so that the second call sees what the first left in
+ * the log.
+ *
+ * 该操作只打开文件 m_file 一次, 以两次调用写入 m_buf, 在 m_split 处分开, 第二次
+ * 调用因此读到第一次调用留在日志中的记录.
+ */
+static void op_model(void)
+{
+	struct file f;
+	uint16_t flags = m_kind == M_APPEND ? O_APPEND : O_CREAT | O_TRUNC;
+
+	if (m_kind == M_UNLINK) {
+		lxfs_unlink(model_names[m_file]);
+		return;
+	}
+	if (fs_open(&f, model_names[m_file], O_WRONLY | flags) < 0)
+		return;
+	if (m_split && f.f_op->write(&f, m_buf, m_split) < m_split)
+		return;
+	if (m_len > m_split)
+		f.f_op->write(&f, m_buf + m_split, m_len - m_split);
+}
+
+/*
+ * 1 if @got bytes in @buf are a state m_kind may leave file m_file in,
+ * from @pre bytes in @prev, with @room bytes the writes may fill.  A
+ * finished operation leaves exactly one state; a cut one may also leave
+ * the state before it, after its truncate or after its first write.
+ *
+ * 若 @buf 中的 @got 个字节是 m_kind 可能使文件 m_file 从 @prev 中的 @pre 个
+ * 字节变成的状态, 返回 1; @room 为写入可以占用的字节数. 完成的操作只留下一种
+ * 状态; 被打断的操作还可能留下操作之前、截断之后或第一次写入之后的状态.
+ */
+static int model_allowed(const char *prev, int pre, const char *buf, int got,
+			 int done, int room)
+{
+	int base = m_kind == M_APPEND ? pre : 0;
+	int want = base + (m_len < room ? m_len : room);
+	int half = base + (m_split < room ? m_split : room);
+
+	if (m_kind == M_UNLINK)
+		want = half = -1;
+	if (!done && got == pre && (got <= 0 || !memcmp(buf, prev, got)))
+		return 1;
+	if (got != want &&
+	    (done || (got != half && !(m_kind == M_REWRITE && got == 0))))
+		return 0;
+	return got <= 0 || (!memcmp(buf, prev, base) &&
+			    !memcmp(buf + base, m_buf, got - base));
+}
+
+/*
+ * the bytes of file @i agree with the model, read() and peek() alike
+ * 文件 @i 的内容与模型一致, 由 read() 与 peek() 读出的都是如此
+ */
+static void model_check(int i)
+{
+	struct file f;
+	char buf[DATA_BYTES];
+	int n, k;
+
+	n = file_get(model_names[i], buf);
+	CHECK(n == model_len[i] && (n <= 0 || !memcmp(buf, model_data[i], n)));
+	if (n < 0 || fs_open(&f, model_names[i], O_RDONLY) < 0)
+		return;
+	for (k = 0; k < n && f.f_op->peek(&f, k) == (uint8_t)buf[k]; k++)
+		;
+	CHECK(k == n && f.f_op->peek(&f, n) == -1);
+}
+
+static void model_tests(void)
+{
+	static char prev[DATA_BYTES], buf[DATA_BYTES];
+	unsigned long saved_writes = writes;
+	int seed, op, i, pre, got, done, ret, room, before = fails;
+
+	for (seed = 1; seed <= MODEL_SEEDS; seed++) {
+		model_seed = seed;
+		memset(eeprom, 0xff, sizeof(eeprom));
+		lxfs_init(ee_read, ee_write);
+		for (i = 0; i < MODEL_FILES; i++)
+			model_len[i] = -1;
+		for (op = 0; op < MODEL_OPS && fails == before; op++) {
+			m_file = model_rand() % MODEL_FILES;
+			m_kind = model_rand() % M_KINDS;
+			if (m_kind == M_APPEND && model_len[m_file] < 0)
+				m_kind = M_REWRITE;
+			m_len = model_rand() % (MODEL_CHUNK + 1);
+			m_split = model_rand() % (m_len + 1);
+			for (i = 0; i < m_len; i++)
+				m_buf[i] = model_rand();
+			pre = model_len[m_file];
+			memcpy(prev, model_data[m_file], pre > 0 ? pre : 0);
+			/*
+			 * a truncate gives back the blocks of the file, an
+			 * append also fills the rest of its last block
+			 * 截断归还该文件的块, 追加还会填满其最后一块的剩余部分
+			 */
+			room = lxfs_free();
+			if (pre > 0)
+				room += m_kind == M_APPEND ?
+					(BLOCK - pre % BLOCK) % BLOCK :
+					(pre + BLOCK - 1) / BLOCK * BLOCK;
+
+			erase_interrupted = model_rand() & 1;
+			done = run_until_reset(op_model, model_rand() % 3 ?
+					       -1 : (long)(model_rand() % 40));
+			if (!done)
+				while (model_rand() % 3 == 0 &&
+				       !run_until_reset(op_mount, model_rand() % 8))
+					;
+			erase_interrupted = 0;
+			if (!done) {
+				ret = lxfs_init(ee_read, ee_write);
+				CHECK(ret == LXFS_CLEAN || ret == LXFS_REPAIRED);
+			}
+
+			got = file_get(model_names[m_file], buf);
+			CHECK(model_allowed(prev, pre, buf, got, done, room));
+			model_len[m_file] = got;
+			memcpy(model_data[m_file], buf, got > 0 ? got : 0);
+			for (i = 0; i < MODEL_FILES; i++)
+				model_check(i);
+			/*
+			 * not after every operation: a mount empties the cache
+			 * of fs/lxfs.c, which the runs between mounts exercise
+			 * 不在每次操作之后挂载: 挂载会清空 fs/lxfs.c 的缓存,
+			 * 两次挂载之间的操作正是用来检验该缓存
+			 */
+			if (!done || model_rand() % 10 == 0)
+				check_blocks();
+		}
+		if (fails != before) {
+			printf("model: seed %d, operation %d\n", seed, op - 1);
+			break;
+		}
+	}
+	/*
+	 * the total printed at the end stays comparable between versions
+	 * 使最后打印的总数在不同版本之间仍可比较
+	 */
+	writes = saved_writes;
+}
+#endif
+
 int main(void)
 {
 	struct file f;
@@ -727,6 +929,9 @@ int main(void)
 	upgrade_tests();
 	wear_tests();
 	dirent_wear_tests();
+#ifndef __AVR__
+	model_tests();
+#endif
 
 	if (fails) {
 		printf("lxfs: %d failed\n", fails);
