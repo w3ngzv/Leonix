@@ -19,7 +19,8 @@
 #else
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
+
+#include <leonix/string.h>
 
 #define PROGMEM
 #define PSTR(s)			(s)

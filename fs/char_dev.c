@@ -11,10 +11,10 @@
  */
 #include <leonix/pgmspace.h>
 #include <stddef.h>
-#include <string.h>
 
 #include <leonix/errno.h>
 #include <leonix/fs.h>
+#include <leonix/string.h>
 
 struct chrdev {
 	const char *name;	/* in flash */

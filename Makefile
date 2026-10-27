@@ -195,15 +195,15 @@ check: $(TEST_BIN) $(TEST_VM_PROGS)
 	$(LXASM) $< $@
 
 tests/test_vm: tests/test_vm.c kernel/vm.c include/leonix/vm.h
-	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $@ \
+	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Itests/host -Iinclude -o $@ \
 		tests/test_vm.c kernel/vm.c
 
 tests/test_vsprintf: tests/test_vsprintf.c lib/vsprintf.c include/leonix/kernel.h
-	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $@ \
+	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Itests/host -Iinclude -o $@ \
 		tests/test_vsprintf.c lib/vsprintf.c
 
 tests/test_lxfs: tests/test_lxfs.c fs/lxfs.c include/leonix/lxfs.h include/leonix/fs.h
-	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $@ \
+	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Itests/host -Iinclude -o $@ \
 		tests/test_lxfs.c fs/lxfs.c
 
 # The STM32 Flash backend with lxfs on top, its registers from
@@ -215,8 +215,8 @@ tests/test_lxfs: tests/test_lxfs.c fs/lxfs.c include/leonix/lxfs.h include/leoni
 tests/test_stm32_flash: tests/test_stm32_flash.c drivers/stm32_flash.c fs/lxfs.c \
 		tests/fake_stm32/asm/stm32f1.h tests/fake_stm32/asm/sections.h \
 		include/leonix/lxfs.h include/leonix/fs.h
-	$(HOSTCC) -std=c11 -O2 -Wall -Wextra -Werror -Itests/fake_stm32 -Iinclude \
-		-o $@ tests/test_stm32_flash.c fs/lxfs.c
+	$(HOSTCC) -std=c11 -O2 -Wall -Wextra -Werror -Itests/fake_stm32 -Itests/host \
+		-Iinclude -o $@ tests/test_stm32_flash.c fs/lxfs.c
 
 # The lxfs test again, built by avr-gcc and run under qemu-system-avr,
 # which has no ATmega32U4: an ATmega2560 runs it, the EEPROM is an array
@@ -234,8 +234,8 @@ AVR_CC ?= avr-gcc
 
 tests/test_lxfs.avr.elf: tests/test_lxfs.c tests/qemu_uart.c fs/lxfs.c \
 		include/leonix/lxfs.h include/leonix/fs.h
-	$(AVR_CC) -mmcu=atmega2560 -Os -std=gnu11 -Wall -Wextra -Werror -Iinclude \
-		-o $@ tests/test_lxfs.c tests/qemu_uart.c fs/lxfs.c
+	$(AVR_CC) -mmcu=atmega2560 -Os -std=gnu11 -Wall -Wextra -Werror -Iarch/avr/include \
+		-Iinclude -o $@ tests/test_lxfs.c tests/qemu_uart.c fs/lxfs.c
 
 check-qemu: tests/test_lxfs.avr.elf
 	sh tests/run-qemu.sh $(QEMU_AVR) $(QEMU_TIMEOUT) $<
