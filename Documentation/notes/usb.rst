@@ -188,9 +188,10 @@ bootloader 的端口出现, 然后运行 avrdude. 端口在 1 秒内没有消失
 
 ``usb_task()`` 的栈为 224 字节. 按 avr-gcc 9.5.0 的 ``-fstack-usage``, 最深
 的路径是 ``console_flush()`` 格式化数字: ``usb_task()`` 16、
-``console_flush()`` 66、``snprintk_P()`` 4、``vsnprintk_P()`` 22、
-``put_number()`` 34 与 ``put()`` 2 字节, 合计 144 字节, 加上切换的 55 字节
-与金丝雀的 2 字节为 201 字节. ``console_flush()`` 以 noinline 留在
+``console_flush()`` 67、``snprintk_P()`` 4、``vsnprintk_P()`` 22、
+``put_number()`` 34 与 ``put()`` 2 字节, 合计 145 字节, 加上切换的 55 字节
+与金丝雀的 2 字节为 202 字节. 记录加入级别字段之前, ``console_flush()`` 为
+66 字节, 下段的实测针对的是那时的映像. ``console_flush()`` 以 noinline 留在
 ``usb_task()`` 之外, 其行缓冲区与记录因此不会叠加在处理请求时调用的
 ``printk()`` 之下.
 

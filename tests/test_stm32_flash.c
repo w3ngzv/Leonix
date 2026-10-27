@@ -86,10 +86,16 @@ static jmp_buf reset_point;
 	}								\
 } while (0)
 
+/*
+ * the message without its KERN_<LEVEL>
+ * 去掉 KERN_<LEVEL> 之后的消息
+ */
 void printk_P(const char *fmt, ...)
 {
 	va_list ap;
 
+	if (fmt[0] == KERN_SOH_ASCII && fmt[1])
+		fmt += 2;
 	va_start(ap, fmt);
 	vsnprintf(last_msg, sizeof(last_msg), fmt, ap);
 	va_end(ap);

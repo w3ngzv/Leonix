@@ -52,13 +52,13 @@ static int eeprom_fs_init(void)
 	case LXFS_CLEAN:
 		break;
 	case LXFS_FORMATTED:
-		printk("mkfs lxfs");
+		pr_notice("mkfs lxfs");
 		break;
 	case LXFS_REPAIRED:
-		printk("lxfs repaired");
+		pr_warn("lxfs repaired");
 		break;
 	default:
-		printk("lxfs: unknown");
+		pr_err("lxfs: unknown");
 		break;
 	}
 	return 0;
