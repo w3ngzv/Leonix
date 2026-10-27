@@ -120,12 +120,16 @@
 #define SCB_SHCSR		MMIO32(0xe000ed24)
 #define SCB_CFSR		MMIO32(0xe000ed28)
 #define SCB_HFSR		MMIO32(0xe000ed2c)
+#define SCB_MMFAR		MMIO32(0xe000ed34)
+#define SCB_BFAR		MMIO32(0xe000ed38)
 
 #define SCB_ICSR_PENDSVSET	(1u << 28)
 #define SCB_CCR_STKALIGN	(1u << 9)
 #define SCB_SHCSR_MEMFAULTENA	(1u << 16)
 #define SCB_SHCSR_BUSFAULTENA	(1u << 17)
 #define SCB_SHCSR_USGFAULTENA	(1u << 18)
+#define SCB_CFSR_MMARVALID	(1u << 7)
+#define SCB_CFSR_BFARVALID	(1u << 15)
 
 /*
  * The STM32F10xxx implements the top 4 bits of each priority byte
