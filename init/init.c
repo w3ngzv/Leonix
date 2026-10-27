@@ -40,21 +40,23 @@ static void init_task(void)
  * @stack: the task's stack
  * @size: bytes in @stack
  *
- * /dev/ttyACM0 becomes standard input and output.
+ * The terminal CONFIG_INIT_CONSOLE names in /dev, ttyACM0 by default,
+ * becomes standard input and output.
  *
- * 打开 /dev/ttyACM0 作为标准输入与标准输出, 再以 @stack (@size 字节) 为栈
- * 创建运行 sh 的任务.
+ * 打开 /dev 中由 CONFIG_INIT_CONSOLE 指定的终端 (默认为 ttyACM0) 作为标准输入与
+ * 标准输出, 再以 @stack (@size 字节) 为栈创建运行 sh 的任务.
  *
- * Context: before sched_start(), after the USB driver has registered
- * the console.  在 sched_start() 之前、USB 驱动注册控制台之后调用.
+ * Context: before sched_start(), after the console driver has
+ * registered the terminal.  在 sched_start() 之前、控制台驱动注册终端之后
+ * 调用.
  * Return: 0, or -1 if there is no console or no room for the task.
  * 成功时返回 0, 没有控制台或任务表已满时返回 -1.
  */
 int init_start(uint8_t *stack, uint16_t size)
 {
-	char path[sizeof("/dev/ttyACM0")];
+	char path[sizeof("/dev/" CONFIG_INIT_CONSOLE)];
 
-	strcpy_P(path, PSTR("/dev/ttyACM0"));
+	strcpy_P(path, PSTR("/dev/" CONFIG_INIT_CONSOLE));
 	if (open(path, O_RDWR) != STDIN_FILENO ||
 	    dup2(STDIN_FILENO, STDOUT_FILENO) != STDOUT_FILENO)
 		return -1;
