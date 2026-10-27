@@ -8,13 +8,13 @@
  */
 #include <leonix/pgmspace.h>
 #include <stddef.h>
-#include <string.h>
 
 #include <leonix/exec.h>
 #include <leonix/init.h>
 #include <leonix/jiffies.h>
 #include <leonix/printk.h>
 #include <leonix/sched.h>
+#include <leonix/string.h>
 #include <leonix/unistd.h>
 
 /*

@@ -18,13 +18,13 @@
  */
 #include <leonix/pgmspace.h>
 #include <stddef.h>
-#include <string.h>
 
 #include <leonix/array_size.h>
 #include <leonix/procfs.h>
 #include <leonix/romfs.h>
 #include <leonix/errno.h>
 #include <leonix/lxfs.h>
+#include <leonix/string.h>
 #include <leonix/tty.h>
 #include <leonix/unistd.h>
 

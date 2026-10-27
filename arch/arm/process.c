@@ -8,11 +8,11 @@
  * 栈帧, 两者必须一起修改.
  */
 #include <stdint.h>
-#include <string.h>
 
 #include <asm/stm32f1.h>
 
 #include <leonix/sched.h>
+#include <leonix/string.h>
 
 /*
  * r4-r11 from switch.S, then r0-r3, r12, lr, pc and xPSR as the

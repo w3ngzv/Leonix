@@ -46,13 +46,13 @@
  */
 #include <avr/io.h>
 #include <avr/pgmspace.h>
-#include <string.h>
 #include <util/delay.h>
 
 #include <leonix/array_size.h>
 #include <leonix/fs.h>
 #include <leonix/kernel.h>
 #include <leonix/module.h>
+#include <leonix/string.h>
 
 #define SWCLK		PB4
 #define SWDIO		PB5

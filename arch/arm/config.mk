@@ -19,12 +19,12 @@ ARM_ARCH_FLAGS := -mcpu=cortex-m3 -mthumb
 CFLAGS  += $(ARM_ARCH_FLAGS) -ffreestanding -ffunction-sections -fdata-sections
 ASFLAGS += $(ARM_ARCH_FLAGS)
 
-# No C library: lib/string.c and arch/arm/include/string.h stand in
-# for the parts of it the kernel uses.  libgcc stays for whatever helper
-# calls gcc emits.
+# No C library: the string functions come from lib/string.c, through
+# include/leonix/string.h.  libgcc stays for whatever helper calls gcc
+# emits.
 #
-# 不链接 C 库: 内核用到的部分由 lib/string.c 与 arch/arm/include/string.h
-# 代替. libgcc 保留, 用于 gcc 生成的辅助函数调用.
+# 不链接 C 库: 字符串函数经由 include/leonix/string.h 取自 lib/string.c.
+# libgcc 保留, 用于 gcc 生成的辅助函数调用.
 LDSCRIPT := arch/arm/leonix.lds
 LDFLAGS  := $(ARM_ARCH_FLAGS) -nostdlib -T $(LDSCRIPT) \
 	    -Wl,--gc-sections -Wl,-Map=$(TARGET).map
