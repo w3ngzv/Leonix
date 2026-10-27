@@ -7,29 +7,20 @@
  * main(): 初始化内核, 启动状态、USB 与 init 三个任务, 然后把 CPU 交给
  * 调度器. 状态任务在 LCD 上显示运行时间与空闲比例, 并把栈用量写入日志.
  */
-#include <avr/io.h>
-#include <leonix/pgmspace.h>
+#include <stdint.h>
 
 #include <leonix/irqflags.h>
 #include <leonix/jiffies.h>
 #include <leonix/kernel.h>
 #include <leonix/lcd.h>
+#include <leonix/leds.h>
+#include <leonix/pgmspace.h>
 #include <leonix/printk.h>
 #include <leonix/sched.h>
 #include <leonix/init.h>
 #include <leonix/usb.h>
 
-/*
- * Sized from what sched_stack_free() reads on the board, with the
- * measurements in Documentation/notes/scheduler.rst.  Recheck them with
- * ps after any change to a task.
- *
- * 栈的大小依据 sched_stack_free() 在板上的读数确定, 测量值见
- * Documentation/notes/scheduler.rst. 修改任务之后用 ps 重新核对.
- */
-#define STATUS_STACK_SIZE	224
-#define INIT_STACK_SIZE		318
-#define RX_ERROR_HALF_PERIOD	(HZ / 20)
+#define LED_ERROR_HALF_PERIOD	(HZ / 20)
 #define LCD_RETRY_INTERVAL	(HZ / 2)
 
 
@@ -115,8 +106,8 @@ static int __attribute__((noinline)) lcd_show_status(uint32_t idle_ticks, uint32
  * A failed transfer means the backpack is gone or the bus glitched.  The
  * task then retries a full lcd_init() every LCD_RETRY_INTERVAL, since a
  * backpack that lost power comes back with an uninitialised HD44780, and
- * meanwhile flashes the RX LED, which lights on low: a dead display
- * cannot report its own fault.
+ * meanwhile flashes the error LED, see include/leonix/leds.h: a dead
+ * display cannot report its own fault.
  *
  * A replug within one update period misses no ACK; lcd_check() before
  * each refresh catches it by the expander's power-on state.
@@ -126,7 +117,8 @@ static int __attribute__((noinline)) lcd_show_status(uint32_t idle_ticks, uint32
  *
  * 传输失败说明转接板已断开或总线出现毛刺. 此后任务每隔 LCD_RETRY_INTERVAL
  * 重试一次完整的 lcd_init(), 因为断电后重新接上的转接板, 其 HD44780 尚未
- * 初始化; 其间闪烁低电平点亮的 RX LED, 因为失效的显示屏无法报告自身的故障.
+ * 初始化; 其间闪烁错误指示 LED (见 include/leonix/leds.h), 因为失效的显示屏
+ * 无法报告自身的故障.
  *
  * 一个更新周期内的拔插不会漏掉 ACK; 每次刷新前的 lcd_check() 通过扩展器的
  * 上电状态发现这种情况.
@@ -140,8 +132,7 @@ static void lcd_task(void)
 	unsigned long flags;
 	int online, err;
 
-	PORTB |= 1 << PORTB0;
-	DDRB |= 1 << DDB0;
+	led_error_off();
 
 	online = lcd_show_banner() == 0;
 	if (online)
@@ -189,15 +180,15 @@ static void lcd_task(void)
 
 		now = get_jiffies();
 		if (time_after_eq(now, next_blink)) {
-			PINB = 1 << PINB0;
-			next_blink = now + RX_ERROR_HALF_PERIOD;
+			led_error_toggle();
+			next_blink = now + LED_ERROR_HALF_PERIOD;
 		}
 		if (time_after_eq(now, next_retry)) {
 			report_stack_usage();
 			if (lcd_show_banner() == 0) {
 				printk("lcd online");
 				online = 1;
-				PORTB |= 1 << PORTB0;
+				led_error_off();
 				last_jiffies = get_jiffies();
 				last_idle = sched_idle_ticks();
 				next_update = last_jiffies + HZ;
@@ -230,23 +221,6 @@ static void stack_task(void)
 	}
 }
 
-/*
- * The L and TX LEDs stay off while the system runs; panic() lights them.
- * L is driven through a buffer from PC7, so the pin is made an output
- * rather than left floating after reset.  L lights on high, TX on low
- * (Documentation/booting.rst, section 4).
- *
- * 系统运行期间 L 与 TX 两个 LED 保持熄灭, panic() 才点亮它们. L 经缓冲器由
- * PC7 驱动, 因此复位后把该引脚设为输出, 不让其悬空. L 高电平点亮, TX 低
- * 电平点亮 (Documentation/booting.rst 第 4 节).
- */
-static void leds_off(void)
-{
-	DDRC |= 1 << DDC7;
-	PORTD |= 1 << PORTD5;
-	DDRD |= 1 << DDD5;
-}
-
 extern const initcall_t __initcall_start[], __initcall_end[];
 
 /**
@@ -273,7 +247,7 @@ void do_initcalls(void)
 		fn = (initcall_t)pgm_read_ptr(call);
 		ret = fn();
 		if (ret < 0)
-			printk("init %x %d", (uint16_t)fn, ret);
+			printk("init %x %d", (unsigned int)(uintptr_t)fn, ret);
 	}
 }
 
@@ -281,7 +255,7 @@ int main(void)
 {
 	time_init();
 	printk("Leonix booted");
-	leds_off();
+	leds_init();
 	do_initcalls();
 	task_create(IS_ENABLED(CONFIG_HD44780) ? lcd_task : stack_task,
 		    status_stack, sizeof(status_stack));
