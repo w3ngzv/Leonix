@@ -113,14 +113,21 @@ bad_interrupt:
 /*
  * HardFault, MemManage, BusFault and UsageFault.  Bit 2 of EXC_RETURN
  * in LR tells which stack the exception frame is on (PM0056 2.3.7);
- * fault_report() takes the frame and EXC_RETURN.
+ * fault_report() takes the frame and EXC_RETURN.  R4 to R11 are not in
+ * the frame and still hold the faulting code's values, so they are
+ * stored first, into fault_callee rather than onto a stack that may be
+ * the one at fault.
  *
  * HardFault、MemManage、BusFault 与 UsageFault. LR 中 EXC_RETURN 的第 2 位指出
  * 异常栈帧位于哪个栈 (PM0056 2.3.7); fault_report() 取得栈帧与 EXC_RETURN.
+ * R4 至 R11 不在栈帧中, 仍保存出错代码的值, 因此先将其存入 fault_callee;
+ * 出错的可能正是某个栈, 所以不压入栈中.
  */
 	.thumb_func
 	.global	fault_entry
 fault_entry:
+	ldr	r0, =fault_callee
+	stmia	r0, {r4-r11}
 	tst	lr, #4
 	ite	eq
 	mrseq	r0, msp
