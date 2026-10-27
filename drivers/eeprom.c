@@ -28,14 +28,8 @@ static void eeprom_dev_read(uint16_t off, void *buf, uint16_t len)
  * TODO: wait for each byte on the EE READY interrupt with a wait queue
  * rather than spinning on EEPE, which counts as busy time.
  *
- * TODO: wear levelling for the directory names; creating and removing a
- * file writes the first name byte of the lowest free entry every time.
- *
  * 待办: 以 EE READY 中断与等待队列等待每个字节写完, 不再在 EEPE 上自旋,
  * 自旋的时间被计为忙碌.
- *
- * 待办: 目录中文件名的磨损均衡; 新建与删除文件每次都写编号最小的空闲
- * 目录项的名字首字节.
  */
 static void eeprom_dev_write(uint16_t off, const void *buf, uint16_t len)
 {

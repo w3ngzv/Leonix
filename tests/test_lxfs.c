@@ -32,6 +32,7 @@
 #define FAT_OFF		8
 #define DIR_OFF		40
 #define DIRENT_SIZE	15
+#define FILES		16
 #define DATA_BYTES	672
 #define FIRST_DATA_BLOCK	11
 #define DATA_BLOCKS	21
@@ -324,6 +325,53 @@ static void wear_tests(void)
 	CHECK(lxfs_init(ee_read, ee_write) == LXFS_CLEAN);
 	CHECK(file_put("/w", O_TRUNC, "x", 1) == 1);
 	CHECK(only_block() == FIRST_DATA_BLOCK + 2);
+	check_blocks();
+}
+
+/*
+ * Creating and removing a file takes each free directory entry in turn,
+ * and a remount carries on past the highest entry in use.
+ *
+ * 反复新建与删除文件时, 各空闲目录项轮流被取用; 重新挂载后从使用中的最高
+ * 目录项之后继续.
+ */
+/*
+ * the index of the entry whose name starts with @c, or -1
+ * 名字以 @c 开头的目录项的编号; 没有时返回 -1
+ */
+static int dirent_of(char c)
+{
+	int i;
+
+	for (i = 0; i < FILES; i++)
+		if (eeprom[DIR_OFF + i * DIRENT_SIZE] == c)
+			return i;
+	return -1;
+}
+
+static void dirent_wear_tests(void)
+{
+	int i;
+
+	memset(eeprom, 0xff, sizeof(eeprom));
+	lxfs_init(ee_read, ee_write);
+	CHECK(file_put("/k", O_CREAT, "", 0) == 0);
+	for (i = 1; i < 6; i++) {
+		CHECK(file_put("/w", O_CREAT, "", 0) == 0);
+		CHECK(dirent_of('w') == i);
+		CHECK(lxfs_unlink("/w") == 0);
+	}
+	CHECK(file_put("/w", O_CREAT, "", 0) == 0);
+	CHECK(lxfs_init(ee_read, ee_write) == LXFS_CLEAN);
+	for (i = 7; i < FILES; i++) {
+		CHECK(file_put("/v", O_CREAT, "", 0) == 0);
+		CHECK(dirent_of('v') == i);
+		CHECK(lxfs_unlink("/v") == 0);
+	}
+	CHECK(file_put("/v", O_CREAT, "", 0) == 0);
+	CHECK(dirent_of('v') == 1);
+	CHECK(dirent_of('k') == 0);
+	CHECK(dirent_of('w') == 6);
 	check_blocks();
 }
 
@@ -678,6 +726,7 @@ int main(void)
 	repair_tests();
 	upgrade_tests();
 	wear_tests();
+	dirent_wear_tests();
 
 	if (fails) {
 		printf("lxfs: %d failed\n", fails);
