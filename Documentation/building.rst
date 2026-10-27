@@ -6,6 +6,8 @@
 
 本文说明如何把 Leonix 编译成映像并写入 Arduino Leonardo. 板子开机之后为何
 需要这些步骤, 见 booting.rst; 启动代码与链接设置的理由, 见 notes/boot.rst.
+STM32F103 的构建、烧录与 QEMU 中的运行, 见 stm32f103.rst 的 "运行 Leonix"
+一节.
 
 
 工具链
@@ -133,6 +135,11 @@ scripts/kconfig, 编译它需要主机上的 bison、flex 与 ncurses. Leonix �
 
 默认配置 arch/avr/configs/leonardo_defconfig 打开 SWD 驱动, 关闭 I2C 与
 HD44780 液晶屏. 没有 .config 时 ``make`` 停下并提示先运行配置工具.
+
+架构同样是 .config 中的选项, 由 arch/Kconfig 的选择项决定, 与 U-Boot 的
+做法相同, 不像 Linux 那样每次以 ``ARCH=`` 传入. ``make stm32f103_defconfig``
+选择 STM32F103, ``make`` 随后从 arch/arm/config.mk 取得工具链与映像规则.
+defconfig 在所有 arch/\*/configs 目录中查找.
 
 修改配置的目标:
 
