@@ -182,13 +182,14 @@ TOOLCHAIN ?= $(CURDIR)/external/toolchain
 COREUTILS ?= external/coreutils
 PYTHON ?= python3
 LXASM := $(PYTHON) $(TOOLCHAIN)/lxasm.py
-TEST_BIN := tests/test_vsprintf tests/test_lxfs tests/test_vm
+TEST_BIN := tests/test_vsprintf tests/test_lxfs tests/test_vm tests/test_stm32_flash
 TEST_VM_PROGS := tests/vm/arith.lx tests/vm/fault.lx
 
 check: $(TEST_BIN) $(TEST_VM_PROGS)
 	./tests/test_vsprintf
 	./tests/test_lxfs
 	./tests/test_vm
+	./tests/test_stm32_flash
 
 %.lx: %.s $(TOOLCHAIN)/lxasm.py
 	$(LXASM) $< $@
@@ -204,6 +205,18 @@ tests/test_vsprintf: tests/test_vsprintf.c lib/vsprintf.c include/leonix/kernel.
 tests/test_lxfs: tests/test_lxfs.c fs/lxfs.c include/leonix/lxfs.h include/leonix/fs.h
 	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Iinclude -o $@ \
 		tests/test_lxfs.c fs/lxfs.c
+
+# The STM32 Flash backend with lxfs on top, its registers from
+# tests/fake_stm32.  -O2 because it remounts once for every program and
+# erase of the rewrites it interrupts.
+#
+# STM32 的 Flash 后端及其上的 lxfs, 寄存器取自 tests/fake_stm32. 以 -O2 编译,
+# 因为该测试对其所中断的每次重写中的每一次编程与擦除都重新挂载一次.
+tests/test_stm32_flash: tests/test_stm32_flash.c drivers/stm32_flash.c fs/lxfs.c \
+		tests/fake_stm32/asm/stm32f1.h tests/fake_stm32/asm/sections.h \
+		include/leonix/lxfs.h include/leonix/fs.h
+	$(HOSTCC) -std=c11 -O2 -Wall -Wextra -Werror -Itests/fake_stm32 -Iinclude \
+		-o $@ tests/test_stm32_flash.c fs/lxfs.c
 
 # The lxfs test again, built by avr-gcc and run under qemu-system-avr,
 # which has no ATmega32U4: an ATmega2560 runs it, the EEPROM is an array

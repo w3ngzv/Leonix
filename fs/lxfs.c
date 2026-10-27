@@ -112,6 +112,8 @@ _Static_assert(LXFS_DATA_FIRST < LXFS_BLOCKS, "no room left for data");
 _Static_assert(LXFS_BLOCKS < LXFS_END, "block numbers collide with markers");
 _Static_assert(LXFS_DATA_FIRST >= 3, "the log needs three metadata blocks");
 _Static_assert(LXFS_BLOCKS <= 32, "the block bitmap of lxfs_check() is 32 bits");
+_Static_assert(LXFS_BLOCK * LXFS_BLOCKS == LXFS_SIZE,
+	       "the blocks must cover the device exactly");
 
 static const char lxfs_magic[4] = { 'L', 'X', 'F', 'S' };
 

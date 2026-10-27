@@ -6,6 +6,12 @@ config EEPROM_LXFS
 	help
 	  lxfs on the ATmega32U4's EEPROM, in drivers/eeprom.c.
 
+config FLASH_LXFS
+	def_bool ARM
+	help
+	  lxfs on the last pages of the STM32F103's Flash, in
+	  drivers/stm32_flash.c.
+
 config I2C
 	bool "I2C bus master"
 	depends on AVR
