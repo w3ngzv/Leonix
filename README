@@ -3,7 +3,8 @@ Leonix
 
 Leonix is a kernel for the Arduino Leonardo (ATmega32U4), written in C
 and AVR assembly and built with avr-gcc.  It does not use the Arduino
-core or any of its libraries.
+core or any of its libraries.  The same kernel also runs on the
+STM32F103C8 (Cortex-M3), from arch/arm; see "STM32F103" below.
 
 The board is meant to run on its own, powered from the barrel jack or
 VIN.  When a computer is attached, the USB port is a CDC-ACM serial
@@ -50,6 +51,23 @@ With Leonix running, make flash restarts the board into the bootloader
 itself.  An older image needs the reset button pressed first.
 
 
+STM32F103
+---------
+
+	make stm32f103_defconfig
+	make
+	make flash
+
+builds leonix.elf for an STM32F103C8 board such as the Blue Pill and
+writes it through an ST-LINK with OpenOCD.  The console is USART1 at
+115200 baud, TX on PA9 and RX on PA10, as /dev/ttyS0; lxfs lives in the
+last 8 KiB of Flash.  The build needs arm-none-eabi-gcc and no C
+library.  "make qemu" runs the same image on QEMU's stm32vldiscovery
+and "make check-boot" drives its shell.  As of 2026-10-27 the port has
+run only under QEMU, not on a board.  Documentation/stm32f103.rst has
+the details.
+
+
 Hardware
 --------
 
@@ -84,6 +102,11 @@ Documentation/building.rst
 	Installing the toolchain, building the image and flashing it
 	through the Caterina bootloader.  "make htmldocs" renders all of
 	Documentation/ to HTML with Sphinx.
+
+Documentation/stm32f103.rst
+	The STM32F103C8: its memory, clocks and instruction set, how
+	Leonix is built, flashed and run on it, and the test programs
+	for the board in tests/stm32.
 
 Documentation/booting.rst
 	The machine state the Caterina bootloader leaves behind when it
