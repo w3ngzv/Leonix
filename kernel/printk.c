@@ -54,6 +54,12 @@ void printk_P(const char *fmt, ...)
 	unsigned long flags;
 	va_list ap;
 
+	/*
+	 * TODO: mark a message that was cut; today it ends short with no
+	 * sign that more was meant.
+	 *
+	 * 待办: 为被截断的消息加上标记; 目前截断之后没有任何提示.
+	 */
 	va_start(ap, fmt);
 	vsnprintk_P(rec.text, sizeof(rec.text), fmt, ap);
 	va_end(ap);
@@ -65,6 +71,13 @@ void printk_P(const char *fmt, ...)
 		log_next = 0;
 	log_seq++;
 	local_irq_restore(flags);
+	/*
+	 * TODO: the console is also the shell's terminal, and a record can
+	 * land between the prompt and what is being typed.
+	 *
+	 * 待办: 控制台同时是 shell 的终端, 日志可能插在提示符与正在输入的
+	 * 内容之间.
+	 */
 	if (console_kick)
 		console_kick();
 }
