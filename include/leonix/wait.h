@@ -3,8 +3,8 @@
 #define _LEONIX_WAIT_H
 
 #include <stdint.h>
-#include <avr/interrupt.h>
 
+#include <leonix/irqflags.h>
 #include <leonix/jiffies.h>
 
 /*
@@ -44,12 +44,12 @@ void __wait(struct wait_queue *wq, uint32_t deadline, uint8_t timed);
 #define wait_event(wq, cond)						\
 	do {								\
 		for (;;) {						\
-			cli();						\
+			local_irq_disable();				\
 			if (cond)					\
 				break;					\
 			__wait((wq), 0, 0);				\
 		}							\
-		sei();							\
+		local_irq_enable();					\
 	} while (0)
 
 /**
@@ -76,7 +76,7 @@ void __wait(struct wait_queue *wq, uint32_t deadline, uint8_t timed);
 		for (;;) {						\
 			uint8_t __late;					\
 									\
-			cli();						\
+			local_irq_disable();				\
 			__late = time_after_eq(get_jiffies(), __deadline); \
 			if (cond)					\
 				break;					\
@@ -86,7 +86,7 @@ void __wait(struct wait_queue *wq, uint32_t deadline, uint8_t timed);
 			}						\
 			__wait((wq), __deadline, 1);			\
 		}							\
-		sei();							\
+		local_irq_enable();					\
 		__ret;							\
 	})
 

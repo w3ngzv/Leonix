@@ -6,7 +6,7 @@
  * 运行用户空间的任务: 在控制台上运行 /bin/sh, 每次退出后重新启动, 与 Linux
  * 在 init=/bin/sh 下运行 shell 的方式相同.
  */
-#include <avr/pgmspace.h>
+#include <leonix/pgmspace.h>
 #include <stddef.h>
 #include <string.h>
 

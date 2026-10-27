@@ -5,16 +5,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 
-#ifdef __AVR__
-#include <avr/pgmspace.h>
-#else
-/*
- * host builds of lib/, for testing: one address space
- * 为测试而在主机上编译 lib/: 只有一个地址空间
- */
-#define PSTR(s)			(s)
-#define pgm_read_byte(p)	(*(const uint8_t *)(p))
-#endif
+#include <leonix/pgmspace.h>
 
 /*
  * Format strings live in flash, so that they cost no SRAM: AVR copies

@@ -20,8 +20,8 @@
  */
 #include <stdarg.h>
 #include <string.h>
-#include <util/atomic.h>
 
+#include <leonix/irqflags.h>
 #include <leonix/jiffies.h>
 #include <leonix/printk.h>
 
@@ -51,6 +51,7 @@ static void (*console_kick)(void);
 void printk_P(const char *fmt, ...)
 {
 	struct log_record rec;
+	unsigned long flags;
 	va_list ap;
 
 	va_start(ap, fmt);
@@ -58,12 +59,12 @@ void printk_P(const char *fmt, ...)
 	va_end(ap);
 	rec.secs = get_jiffies() / HZ;
 
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		log_buf[log_next] = rec;
-		if (++log_next == LOG_RECORDS)
-			log_next = 0;
-		log_seq++;
-	}
+	local_irq_save(flags);
+	log_buf[log_next] = rec;
+	if (++log_next == LOG_RECORDS)
+		log_next = 0;
+	log_seq++;
+	local_irq_restore(flags);
 	if (console_kick)
 		console_kick();
 }
@@ -89,11 +90,12 @@ void register_console(void (*kick)(void))
  */
 uint16_t log_newest(void)
 {
+	unsigned long flags;
 	uint16_t seq;
 
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		seq = log_seq;
-	}
+	local_irq_save(flags);
+	seq = log_seq;
+	local_irq_restore(flags);
 	return seq;
 }
 
@@ -109,13 +111,14 @@ uint16_t log_newest(void)
  */
 int log_read(uint16_t seq, struct log_record *rec)
 {
+	unsigned long flags;
 	int ret = -1;
 
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		if (seq && seq <= log_seq && log_seq - seq < LOG_RECORDS) {
-			*rec = log_buf[(seq - 1) % LOG_RECORDS];
-			ret = 0;
-		}
+	local_irq_save(flags);
+	if (seq && seq <= log_seq && log_seq - seq < LOG_RECORDS) {
+		*rec = log_buf[(seq - 1) % LOG_RECORDS];
+		ret = 0;
 	}
+	local_irq_restore(flags);
 	return ret;
 }

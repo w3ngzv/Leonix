@@ -11,10 +11,9 @@
  * 准. 睡眠的任务在唤醒时间之前被跳过; 所有任务都在睡眠时, 空闲任务使 CPU 进入
  * Idle 模式, 直到下一个中断.
  */
-#include <avr/interrupt.h>
 #include <avr/sleep.h>
-#include <util/atomic.h>
 
+#include <leonix/irqflags.h>
 #include <leonix/jiffies.h>
 #include <leonix/panic.h>
 #include <leonix/sched.h>
@@ -178,13 +177,14 @@ uint16_t sched_stack_free(uint8_t index)
  */
 uint8_t sched_task_state(uint8_t index)
 {
+	unsigned long flags;
 	uint8_t state;
 
 	if (index >= nr_tasks)
 		return SCHED_NO_STATE;
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		state = tasks[index].state;
-	}
+	local_irq_save(flags);
+	state = tasks[index].state;
+	local_irq_restore(flags);
 	return state;
 }
 
@@ -293,11 +293,12 @@ void scheduler_tick(void)
  */
 uint32_t sched_idle_ticks(void)
 {
+	unsigned long flags;
 	uint32_t ticks;
 
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		ticks = idle_ticks;
-	}
+	local_irq_save(flags);
+	ticks = idle_ticks;
+	local_irq_restore(flags);
 	return ticks;
 }
 
@@ -319,7 +320,7 @@ uint32_t sched_idle_ticks(void)
  */
 void sleep_until(uint32_t deadline)
 {
-	cli();
+	local_irq_disable();
 	current->wake_at = deadline;
 	current->state = TASK_SLEEPING;
 	arch_yield();
@@ -356,9 +357,9 @@ void __wait(struct wait_queue *wq, uint32_t deadline, uint8_t timed)
 	current->state = timed ? TASK_SLEEPING : TASK_BLOCKED;
 	arch_yield();
 
-	cli();
+	local_irq_disable();
 	wq->waiters &= ~bit;
-	sei();
+	local_irq_enable();
 }
 
 /**
@@ -379,21 +380,22 @@ void __wait(struct wait_queue *wq, uint32_t deadline, uint8_t timed)
  */
 uint8_t wake_up(struct wait_queue *wq)
 {
+	unsigned long flags;
 	uint8_t woken = 0;
 	uint8_t i;
 
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		for (i = 0; i < nr_tasks; i++) {
-			if (!(wq->waiters & (1 << i)))
-				continue;
-			if (tasks[i].state == TASK_SLEEPING ||
-			    tasks[i].state == TASK_BLOCKED) {
-				tasks[i].state = TASK_RUNNABLE;
-				woken++;
-			}
+	local_irq_save(flags);
+	for (i = 0; i < nr_tasks; i++) {
+		if (!(wq->waiters & (1 << i)))
+			continue;
+		if (tasks[i].state == TASK_SLEEPING ||
+		    tasks[i].state == TASK_BLOCKED) {
+			tasks[i].state = TASK_RUNNABLE;
+			woken++;
 		}
-		wq->waiters = 0;
 	}
+	wq->waiters = 0;
+	local_irq_restore(flags);
 	return woken;
 }
 
@@ -440,7 +442,7 @@ static void idle(void)
  */
 void sched_start(void)
 {
-	cli();
+	local_irq_disable();
 	set_sleep_mode(SLEEP_MODE_IDLE);
 	task_init(&idle_task, idle, idle_stack, sizeof(idle_stack));
 
