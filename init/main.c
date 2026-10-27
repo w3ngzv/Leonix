@@ -227,12 +227,17 @@ extern const initcall_t __initcall_start[], __initcall_end[];
  * do_initcalls() - call every initcall, level 1 first
  *
  * Linux's do_initcalls() without the per-level loop: the linker script
- * has sorted the table by level.  A failure is logged with the function's
- * word address, to look up in leonix.map.
+ * has sorted the table by level.  A failure is logged with the low 16
+ * bits of the function's address, to look up in leonix.map: the word
+ * address on AVR, the offset into the 64 KiB of Flash on the STM32F103,
+ * with bit 0 set for Thumb.  The full address would push the error code
+ * past the LOG_TEXT - 1 characters of a record.
  *
  * 依次调用所有 initcall, 级别 1 最先. 与 Linux 的 do_initcalls() 相同,
- * 但没有按级别的循环: 链接脚本已按级别排好了表. 失败时以函数的字地址记入
- * 日志, 可在 leonix.map 中查找.
+ * 但没有按级别的循环: 链接脚本已按级别排好了表. 失败时以函数地址的低 16 位
+ * 记入日志, 可在 leonix.map 中查找: 在 AVR 上即字地址, 在 STM32F103 上即在
+ * 64 KiB Flash 中的偏移, Thumb 函数的第 0 位为 1. 完整的地址会把错误码挤出
+ * 一条记录的 LOG_TEXT - 1 个字符.
  *
  * Context: main(), before sched_start().  由 main() 在 sched_start()
  * 之前调用.
@@ -247,7 +252,7 @@ void do_initcalls(void)
 		fn = (initcall_t)pgm_read_ptr(call);
 		ret = fn();
 		if (ret < 0)
-			printk("init %x %d", (unsigned int)(uintptr_t)fn, ret);
+			printk("init %x %d", (uint16_t)(uintptr_t)fn, ret);
 	}
 }
 
@@ -260,7 +265,7 @@ int main(void)
 	task_create(IS_ENABLED(CONFIG_HD44780) ? lcd_task : stack_task,
 		    status_stack, sizeof(status_stack));
 	if (IS_ENABLED(CONFIG_USB_CDC_ACM) && usb_init() < 0)
-		printk("usb init failed");
+		printk("usb init fail");
 	else if (init_start(init_stack, sizeof(init_stack)) < 0)
 		printk("no init");
 	sched_start();
