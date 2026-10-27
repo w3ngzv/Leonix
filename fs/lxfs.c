@@ -276,19 +276,22 @@ static void dirent_raw(uint8_t index, struct lxfs_dirent *de)
 }
 
 /*
- * the entry with the first block and size of its newest record
- * 目录项, 首块与大小取自其最新的记录
+ * The first block and size of entry @index, from its newest record or
+ * else from the entry.  The name is left unread: the virtual machine
+ * comes here for every code byte, and no caller looks at the name.
+ *
+ * 目录项 @index 的首块与大小, 取自其最新的记录, 没有记录时取自目录项. 名字不
+ * 读取: 虚拟机每取一个代码字节都调用本函数, 而调用者都不使用名字.
  */
 static void dirent_get(uint8_t index, struct lxfs_dirent *de)
 {
-	dirent_raw(index, de);
 	if (index != cache_index) {
 		cache_slot = log_find(index, LOG_SLOTS);
 		cache_index = index;
 	}
-	if (cache_slot != LXFS_FREE)
-		dev_read(LOG_RECS + cache_slot * LOG_REC,
-			 (uint8_t *)de + DIRENT_FIRST, LOG_REC);
+	dev_read(cache_slot != LXFS_FREE ? LOG_RECS + cache_slot * LOG_REC :
+		 DIR_OFF + index * DIRENT_SIZE + DIRENT_FIRST,
+		 (uint8_t *)de + DIRENT_FIRST, LOG_REC);
 }
 
 static uint16_t dirent_size(const struct lxfs_dirent *de)
