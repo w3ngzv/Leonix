@@ -107,6 +107,7 @@ struct lxfs_dirent {
 #define DIRENT_SIZE_LO		offsetof(struct lxfs_dirent, size_lo)
 #define DIR_END			(DIR_OFF + LXFS_FILES * DIRENT_SIZE)
 #define LXFS_DATA_FIRST		((DIR_END + LXFS_BLOCK - 1) / LXFS_BLOCK)
+#define LXFS_DATA_BLOCKS	(LXFS_BLOCKS - LXFS_DATA_FIRST)
 
 _Static_assert(LXFS_DATA_FIRST < LXFS_BLOCKS, "no room left for data");
 _Static_assert(LXFS_BLOCKS < LXFS_END, "block numbers collide with markers");
@@ -120,6 +121,15 @@ static const char lxfs_magic[4] = { 'L', 'X', 'F', 'S' };
 static lxfs_read_fn dev_read;
 static lxfs_write_fn dev_write;
 static uint8_t mounted;
+/*
+ * where alloc_block() starts looking, so that blocks are taken in turn
+ * and no block wears out first; set past the highest block in use at
+ * mount, which keeps the turn across a reset
+ *
+ * alloc_block() 开始查找的位置, 使各块轮流被取用, 不由某一块先磨损; 挂载时
+ * 设为使用中的最高块之后, 复位后轮转因此得以延续
+ */
+static uint8_t next_block;
 
 static uint8_t fat_get(uint8_t block)
 {
@@ -267,15 +277,33 @@ static int lxfs_read(struct file *f, char *buf, uint8_t count)
  */
 static uint8_t alloc_block(void)
 {
-	uint8_t b;
+	uint8_t b = next_block, n;
 
-	for (b = LXFS_DATA_FIRST; b < LXFS_BLOCKS; b++) {
+	for (n = LXFS_DATA_BLOCKS; n; n--) {
+		if (b >= LXFS_BLOCKS)
+			b = LXFS_DATA_FIRST;
 		if (fat_get(b) == LXFS_FREE) {
 			fat_set(b, LXFS_END);
+			next_block = b + 1;
 			return b;
 		}
+		b++;
 	}
 	return LXFS_FREE;
+}
+
+/*
+ * point next_block past the highest data block in use
+ * 使 next_block 指向使用中的最高数据块之后
+ */
+static void find_next_block(void)
+{
+	uint8_t b;
+
+	next_block = LXFS_DATA_FIRST;
+	for (b = LXFS_DATA_FIRST; b < LXFS_BLOCKS; b++)
+		if (fat_get(b) != LXFS_FREE)
+			next_block = b + 1;
 }
 
 static int lxfs_write(struct file *f, const char *buf, uint8_t count)
@@ -613,7 +641,7 @@ int lxfs_init(lxfs_read_fn read, lxfs_write_fn write)
 {
 	uint8_t sb[sizeof(lxfs_magic) + 1];
 	uint8_t blank[DIRENT_SIZE];
-	uint8_t i;
+	uint8_t i, repaired;
 
 	dev_read = read;
 	dev_write = write;
@@ -623,7 +651,9 @@ int lxfs_init(lxfs_read_fn read, lxfs_write_fn write)
 		if (sb[sizeof(lxfs_magic)] != LXFS_VERSION)
 			return -EINVAL;
 		mounted = 1;
-		return lxfs_check() ? LXFS_REPAIRED : LXFS_CLEAN;
+		repaired = lxfs_check();
+		find_next_block();
+		return repaired ? LXFS_REPAIRED : LXFS_CLEAN;
 	}
 
 	memset(blank, LXFS_FREE, sizeof(blank));
@@ -634,6 +664,7 @@ int lxfs_init(lxfs_read_fn read, lxfs_write_fn write)
 	memcpy(sb, lxfs_magic, sizeof(lxfs_magic));
 	sb[sizeof(lxfs_magic)] = LXFS_VERSION;
 	dev_write(SB_OFF, sb, sizeof(sb));
+	next_block = LXFS_DATA_FIRST;
 	mounted = 1;
 	return LXFS_FORMATTED;
 }

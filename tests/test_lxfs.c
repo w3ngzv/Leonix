@@ -33,6 +33,8 @@
 #define DIR_OFF		40
 #define DIRENT_SIZE	15
 #define DATA_BYTES	736
+#define FIRST_DATA_BLOCK	9
+#define DATA_BLOCKS	23
 
 static uint8_t eeprom[EEPROM_SIZE];
 static unsigned int writes;
@@ -244,6 +246,40 @@ static void dirent_poke(int index, const char *name, uint8_t first, uint16_t siz
 }
 
 /*
+ * Rewriting a one-block file takes each data block in turn, and a
+ * remount carries on past the highest block in use rather than going
+ * back to the first.
+ *
+ * 反复改写一个单块文件时, 各数据块轮流被取用; 重新挂载后从使用中的最高块之后
+ * 继续, 不回到第一块.
+ */
+static void wear_tests(void)
+{
+	const uint8_t *first = eeprom + DIR_OFF + 12;
+	uint8_t used[DATA_BLOCKS] = { 0 };
+	int i;
+
+	memset(eeprom, 0xff, sizeof(eeprom));
+	lxfs_init(ee_read, ee_write);
+	for (i = 0; i < DATA_BLOCKS; i++) {
+		CHECK(file_put("/w", O_CREAT | O_TRUNC, "x", 1) == 1);
+		CHECK(*first >= FIRST_DATA_BLOCK &&
+		      *first < FIRST_DATA_BLOCK + DATA_BLOCKS);
+		used[*first - FIRST_DATA_BLOCK]++;
+	}
+	for (i = 0; i < DATA_BLOCKS; i++)
+		CHECK(used[i] == 1);
+
+	CHECK(file_put("/w", O_TRUNC, "x", 1) == 1);
+	CHECK(*first == FIRST_DATA_BLOCK);
+	CHECK(file_put("/w", O_TRUNC, "x", 1) == 1);
+	CHECK(lxfs_init(ee_read, ee_write) == LXFS_CLEAN);
+	CHECK(file_put("/w", O_TRUNC, "x", 1) == 1);
+	CHECK(*first == FIRST_DATA_BLOCK + 2);
+	check_blocks();
+}
+
+/*
  * images that earlier kernels or a damaged part can leave behind
  * 早期内核或损坏的芯片可能留下的映像
  */
@@ -429,6 +465,7 @@ int main(void)
 
 	crash_tests();
 	repair_tests();
+	wear_tests();
 
 	if (fails) {
 		printf("lxfs: %d failed\n", fails);
