@@ -13,6 +13,7 @@ __pycache__/
 node_modules/
 Documentation/output/
 tests/test_vsprintf
+tests/test_printk
 tests/test_lxfs
 tests/test_vm
 tests/test_stm32_flash

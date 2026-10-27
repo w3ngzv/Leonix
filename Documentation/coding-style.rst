@@ -25,11 +25,14 @@ Leonix 的 C 与汇编代码遵循 Linux 126ad898a6e9 (v7.3-16337, 7.4 合并窗
   make check-qemu                    # 以 avr-gcc 编译 lxfs 测试, 在 QEMU 中运行
 
 提交之前, 上述命令都应无错误. checkstyle.sh 调用同一提交的
-scripts/checkpatch.pl, 选项在 .checkpatch.conf 中. 该文件关闭了六类检查,
-每一类要求的设施 Leonix 都没有: printk() 的日志级别、compiler_attributes.h、
-strscpy() 以及 READ_ONCE(). 其余检查与 Linux 相同, 警告与错误同样需要处理.
+scripts/checkpatch.pl, 选项在 .checkpatch.conf 中. 该文件关闭了五类检查,
+每一类要求的设施 Leonix 都没有: compiler_attributes.h、strscpy() 以及
+READ_ONCE(). 其余检查与 Linux 相同, 警告与错误同样需要处理.
 scripts/kconfig 与 include/leonix/kconfig.h 中的宏是原样导入的 Linux 代码,
 不在检查之列; checkpatch.pl 对 Linux 自身的这些宏同样报告警告.
+include/leonix/kern_levels.h 与 include/leonix/printk.h 只免于 checkpatch.pl,
+``KERN_<LEVEL>`` 与 ``pr_<level>()`` 的写法与 Linux 的同名文件相同,
+checkpatch.pl 对 Linux 的这两个文件报告同样的问题.
 
 checkstyle.sh 另外运行两项检查. scripts/kernel-doc 是 Linux 在 683e8cbaba7f
 删除 Perl 版本之前的最后一版, 即 de258fa8ca8d 中的 scripts/kernel-doc.pl, 以

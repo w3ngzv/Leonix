@@ -30,7 +30,7 @@ static void init_task(void)
 
 	for (;;) {
 		status = exec(1, argv);
-		printk("sh exited %d", status);
+		pr_warn("sh exited %d", status);
 		msleep(INIT_RETRY_MS);
 	}
 }
