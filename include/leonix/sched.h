@@ -53,6 +53,7 @@ void msleep(uint16_t ms);
 uint32_t sched_idle_ticks(void);
 uint16_t sched_stack_free(uint8_t index);
 uint8_t sched_task_state(uint8_t index);
+uint8_t sched_current(void);
 
 /*
  * in arch/<arch>/, for kernel/sched.c only; asm/sched.h has the rest
