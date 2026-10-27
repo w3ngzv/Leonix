@@ -214,6 +214,10 @@ static const char *rest_to_name(const char *rest, int *err)
 	const char *name = rest + 1;
 	size_t len = strlen(name);
 
+	/*
+	 * TODO: subdirectories; the directory is one flat table
+	 * 待办: 子目录; 目录只是一张平坦的表
+	 */
 	*err = -ENOENT;
 	if (rest[0] != '/' || !len || strchr(name, '/'))
 		return NULL;
@@ -282,6 +286,13 @@ static int lxfs_write(struct file *f, const char *buf, uint8_t count)
 
 	dirent_get(f->private_data, &de);
 	old = size = dirent_size(&de);
+	/*
+	 * TODO: writing anywhere but the end, which needs the block of
+	 * f_pos found as lxfs_read() finds it.
+	 *
+	 * 待办: 在末尾以外的位置写入, 需要像 lxfs_read() 那样找出 f_pos 所在的
+	 * 块.
+	 */
 	if (f->f_pos != size)
 		return -EINVAL;
 	first = de.first;
@@ -472,6 +483,13 @@ int lxfs_unlink(const char *rest)
 	index = find(name);
 	if (index < 0)
 		return index;
+	/*
+	 * TODO: a descriptor still open on the file keeps its directory
+	 * index, and reads whatever file is created there next.
+	 *
+	 * 待办: 仍打开该文件的描述符保留其目录项编号, 会读到此后在该目录项
+	 * 创建的文件.
+	 */
 	dirent_get(index, &de);
 	dirent_set(index, 0, LXFS_FREE);
 	free_chain(de.first);

@@ -295,9 +295,26 @@ int exec(int argc, const char *const argv[])
 		goto out;
 	}
 
+	/*
+	 * TODO: the program runs on the caller's task and the caller waits,
+	 * so there are no processes: no fork(), no wait(), nothing runs
+	 * beside the shell, and pipes have nothing to connect.  See
+	 * Documentation/notes/vm.rst.
+	 *
+	 * 待办: 程序在调用者的任务上运行, 调用者等待其结束, 因此没有进程: 没有
+	 * fork() 与 wait(), 没有与 shell 并发的程序, 管道也无从连接. 见
+	 * Documentation/notes/vm.rst.
+	 */
 	depth++;
 	fault = vm_run(&p->vm);
 	depth--;
+	/*
+	 * TODO: close the descriptors the program left open, as Linux does
+	 * at exit; each one forgotten holds one of the MAX_FDS slots.
+	 *
+	 * 待办: 与 Linux 在进程退出时相同, 关闭程序未关闭的描述符; 每漏关一个就
+	 * 占用 MAX_FDS 项中的一项.
+	 */
 	if (fault) {
 		printk("vm fault %u", fault);
 		err = FAULT_STATUS + fault;

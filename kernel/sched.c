@@ -60,6 +60,12 @@ struct task *current;
  */
 static void task_exit(void)
 {
+	/*
+	 * TODO: reuse the slot and the stack, which tasks created at run
+	 * time, and so processes, need.
+	 *
+	 * 待办: 回收任务表项与栈, 运行时创建任务以及进程都需要这一点.
+	 */
 	current->state = TASK_DEAD;
 	arch_yield();
 	for (;;)
@@ -219,6 +225,13 @@ void schedule(void)
 
 	check_stack(current);
 
+	/*
+	 * TODO: priorities; a task woken by an interrupt may wait behind
+	 * every other runnable task for a full tick each.
+	 *
+	 * 待办: 优先级; 被中断唤醒的任务可能要等其他每个可运行任务各用满
+	 * 一个节拍.
+	 */
 	for (n = 0; n < nr_tasks; n++) {
 		if (++i == nr_tasks)
 			i = 0;

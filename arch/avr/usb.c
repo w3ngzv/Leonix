@@ -239,8 +239,11 @@ static const uint8_t device_desc[] PROGMEM = {
 	lo(USB_VID), hi(USB_VID), lo(USB_PID), hi(USB_PID),
 	lo(0x0100), hi(0x0100),		/* bcdDevice */
 	/*
-	 * no manufacturer string, product string 1, no serial number
-	 * 没有厂商字符串, 产品字符串为 1, 没有序列号
+	 * No manufacturer string, product string 1, no serial number.
+	 * TODO: a serial number, so that a host can tell two boards apart.
+	 *
+	 * 没有厂商字符串, 产品字符串为 1, 没有序列号. 待办: 序列号, 使主机能够
+	 * 区分两块板子.
 	 */
 	0, 1, 0,
 	1,
@@ -319,6 +322,12 @@ static struct wait_queue acm_tx_wq = WAIT_QUEUE_INIT;
  * 等待当前选中端点上 @mask 中的任一标志. 返回找到的标志; 超过
  * USB_EP0_TIMEOUT_MS 后返回 0. 计的是自旋次数, 因此被切换出去的时间只会使等待变
  * 长.
+ */
+/*
+ * TODO: sleep on the endpoint interrupt instead of spinning; the task
+ * holds the CPU while it waits for the host.
+ *
+ * 待办: 在端点中断上睡眠, 不再自旋; 等待主机期间该任务一直占用 CPU.
  */
 static uint8_t ep_wait(uint8_t mask)
 {
@@ -843,6 +852,12 @@ uint8_t usb_general_interrupt(void)
 {
 	uint8_t ep_saved = UENUM;
 
+	/*
+	 * TODO: bus suspend is not handled, so the controller stays at full
+	 * power while the host sleeps
+	 *
+	 * 待办: 没有处理总线挂起, 主机睡眠期间控制器仍以全功率运行
+	 */
 	if (UDINT & (1 << EORSTI)) {
 		UDINT = ~(1 << EORSTI);
 		usb_config = 0;

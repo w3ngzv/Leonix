@@ -23,6 +23,13 @@ OUTPUT_ARCH(arm)
 ENTRY(reset_handler)
 
 LXFS_FLASH_BYTES = 8K;
+/*
+ * TODO: the main stack's use has not been measured; fill it with a
+ * pattern in reset_handler and read it back as sched_stack_free() does.
+ *
+ * 待办: 主栈的用量没有测量过; 在 reset_handler 中填充图样, 再像
+ * sched_stack_free() 那样读回.
+ */
 BOOT_STACK_BYTES = 1K;
 QEMU_RAM_BYTES = 8K;
 

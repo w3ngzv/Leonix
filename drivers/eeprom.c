@@ -23,6 +23,18 @@ static void eeprom_dev_read(uint16_t off, void *buf, uint16_t len)
 	eeprom_read_block(buf, (const void *)off, len);
 }
 
+/*
+ * TODO: wait for each byte on the EE READY interrupt with a wait queue
+ * rather than spinning on EEPE, which counts as busy time.
+ *
+ * TODO: wear levelling; lxfs writes its metadata to the same bytes every
+ * time.
+ *
+ * 待办: 以 EE READY 中断与等待队列等待每个字节写完, 不再在 EEPE 上自旋,
+ * 自旋的时间被计为忙碌.
+ *
+ * 待办: 磨损均衡; lxfs 每次都把元数据写在同样的字节上.
+ */
 static void eeprom_dev_write(uint16_t off, const void *buf, uint16_t len)
 {
 	eeprom_update_block(buf, (void *)off, len);
