@@ -20,6 +20,7 @@ typedef void (*lxfs_write_fn)(uint16_t off, const void *buf, uint16_t len);
 #define LXFS_CLEAN		0
 #define LXFS_FORMATTED		1
 #define LXFS_REPAIRED		2
+#define LXFS_UPGRADED		3
 
 int lxfs_init(lxfs_read_fn read, lxfs_write_fn write);
 int lxfs_open(struct file *f, const char *rest, uint16_t flags);
