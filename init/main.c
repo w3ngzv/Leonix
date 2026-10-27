@@ -259,7 +259,7 @@ int main(void)
 	do_initcalls();
 	task_create(IS_ENABLED(CONFIG_HD44780) ? lcd_task : stack_task,
 		    status_stack, sizeof(status_stack));
-	if (usb_init() < 0)
+	if (IS_ENABLED(CONFIG_USB_CDC_ACM) && usb_init() < 0)
 		printk("usb init failed");
 	else if (init_start(init_stack, sizeof(init_stack)) < 0)
 		printk("no init");
