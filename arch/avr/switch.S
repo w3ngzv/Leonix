@@ -4,15 +4,15 @@
  * USB interrupts and arch_yield().
  *
  * The interrupt has already pushed the PC.  The frame below it is r0,
- * SREG, r1, r2 ... r31, from high address to low, and task_init() in
- * kernel/sched.c builds the same frame for a task that has not run yet.
- * The two must be changed together.
+ * SREG, r1, r2 ... r31, from high address to low, and arch_task_frame()
+ * in arch/avr/process.c builds the same frame for a task that has not run
+ * yet.  The two must be changed together.
  *
  * 在 Timer1 比较匹配 A 中断、TWI 与 USB 中断以及 arch_yield() 中切换上下文.
  *
  * 中断已经压入 PC. PC 之下的栈帧自高地址向低地址依次为 r0、SREG、r1、r2 ...
- * r31; kernel/sched.c 中的 task_init() 为尚未运行的任务构造同样的栈帧. 两者必须
- * 一起修改.
+ * r31; arch/avr/process.c 中的 arch_task_frame() 为尚未运行的任务构造同样的栈
+ * 帧. 两者必须一起修改.
  */
 
 #include <avr/io.h>
@@ -152,10 +152,10 @@ arch_yield:
 	reti
 
 	/*
-	 * Enter current from the frame task_init() built.  reti enables
+	 * Enter current from the frame arch_task_frame() built.  reti enables
 	 * interrupts.
 	 *
-	 * 从 task_init() 构造的栈帧进入 current. reti 打开中断.
+	 * 从 arch_task_frame() 构造的栈帧进入 current. reti 打开中断.
 	 */
 	.global	arch_start_first_task
 arch_start_first_task:
