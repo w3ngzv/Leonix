@@ -60,4 +60,9 @@ qemu: $(TARGET).elf
 	$(QEMU_ARM) -M stm32vldiscovery -kernel $< -nographic -monitor none \
 		-serial stdio
 
-.PHONY: flash qemu
+# the boot and shell test of tests/qemu_boot.py on the same machine
+# 在同一机器上运行 tests/qemu_boot.py 的启动与 shell 测试
+check-boot: $(TARGET).elf
+	$(PYTHON) tests/qemu_boot.py --qemu $(QEMU_ARM) $<
+
+.PHONY: flash qemu check-boot
