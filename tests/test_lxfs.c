@@ -32,12 +32,14 @@
 #define FAT_OFF		8
 #define DIR_OFF		40
 #define DIRENT_SIZE	15
-#define DATA_BYTES	736
-#define FIRST_DATA_BLOCK	9
-#define DATA_BLOCKS	23
+#define DATA_BYTES	672
+#define FIRST_DATA_BLOCK	11
+#define DATA_BLOCKS	21
+#define BLOCK		32
+#define VERSION_OFF	4
 
 static uint8_t eeprom[EEPROM_SIZE];
-static unsigned int writes;
+static unsigned long writes;
 static int fails;
 
 /*
@@ -73,9 +75,25 @@ static void ee_write(uint16_t off, const void *buf, uint16_t len)
 	}
 }
 
+/*
+ * On the ATmega2560 of "make check-qemu" the text of each condition
+ * stays in flash: copied to SRAM at reset, as plain strings are, it
+ * leaves too little for the stack.
+ *
+ * 在 "make check-qemu" 所用的 ATmega2560 上, 各条件的文本留在 flash 中: 若像
+ * 普通字符串那样在复位时复制到 SRAM, 留给栈的空间不够.
+ */
+#ifdef __AVR__
+#include <avr/pgmspace.h>
+#define FAIL_PRINT(cond) \
+	printf_P(PSTR("FAIL line %d: %S\n"), __LINE__, PSTR(#cond))
+#else
+#define FAIL_PRINT(cond) printf("FAIL line %d: %s\n", __LINE__, #cond)
+#endif
+
 #define CHECK(cond) do {						\
 	if (!(cond)) {							\
-		printf("FAIL line %d: %s\n", __LINE__, #cond);		\
+		FAIL_PRINT(cond);					\
 		fails++;						\
 	}								\
 } while (0)
@@ -150,12 +168,22 @@ static void check_blocks(void)
 static char old_a[300], new_a[300];
 static int old_len, new_len;
 
+/*
+ * rewrites of /d before the operation, which move the log on
+ * 操作之前改写 /d 的次数, 用于推进日志
+ */
+static int churn;
+
 static void setup_ab(void)
 {
+	int i;
+
 	memset(eeprom, 0xff, sizeof(eeprom));
 	lxfs_init(ee_read, ee_write);
 	file_put("/b", O_CREAT, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 40);
 	file_put("/a", O_CREAT, old_a, old_len);
+	for (i = 0; i < churn; i++)
+		file_put("/d", O_CREAT | O_TRUNC, "d", 1);
 }
 
 static void op_append(void) { file_put("/a", O_APPEND, new_a + old_len, new_len - old_len); }
@@ -215,6 +243,8 @@ static void crash_test(void (*op)(void), int a_after, int c_after)
 			CHECK(c == c_after);
 		}
 		CHECK(file_get("/b", buf) == 40 && buf[39] == 'b');
+		if (churn)
+			CHECK(file_get("/d", buf) == 1 && buf[0] == 'd');
 		check_blocks();
 	}
 }
@@ -253,29 +283,184 @@ static void dirent_poke(int index, const char *name, uint8_t first, uint16_t siz
  * 反复改写一个单块文件时, 各数据块轮流被取用; 重新挂载后从使用中的最高块之后
  * 继续, 不回到第一块.
  */
+/*
+ * the one data block in use, read from the table; -1 unless exactly one
+ * 从下一块表读出唯一一个使用中的数据块; 不是恰好一个时返回 -1
+ */
+static int only_block(void)
+{
+	int b, found = -1;
+
+	for (b = FIRST_DATA_BLOCK; b < FIRST_DATA_BLOCK + DATA_BLOCKS; b++) {
+		if (eeprom[FAT_OFF + b] == 0xff)
+			continue;
+		if (found >= 0)
+			return -1;
+		found = b;
+	}
+	return found;
+}
+
 static void wear_tests(void)
 {
-	const uint8_t *first = eeprom + DIR_OFF + 12;
 	uint8_t used[DATA_BLOCKS] = { 0 };
-	int i;
+	int i, b;
 
 	memset(eeprom, 0xff, sizeof(eeprom));
 	lxfs_init(ee_read, ee_write);
 	for (i = 0; i < DATA_BLOCKS; i++) {
 		CHECK(file_put("/w", O_CREAT | O_TRUNC, "x", 1) == 1);
-		CHECK(*first >= FIRST_DATA_BLOCK &&
-		      *first < FIRST_DATA_BLOCK + DATA_BLOCKS);
-		used[*first - FIRST_DATA_BLOCK]++;
+		b = only_block();
+		CHECK(b >= 0);
+		if (b >= 0)
+			used[b - FIRST_DATA_BLOCK]++;
 	}
 	for (i = 0; i < DATA_BLOCKS; i++)
 		CHECK(used[i] == 1);
 
 	CHECK(file_put("/w", O_TRUNC, "x", 1) == 1);
-	CHECK(*first == FIRST_DATA_BLOCK);
+	CHECK(only_block() == FIRST_DATA_BLOCK);
 	CHECK(file_put("/w", O_TRUNC, "x", 1) == 1);
 	CHECK(lxfs_init(ee_read, ee_write) == LXFS_CLEAN);
 	CHECK(file_put("/w", O_TRUNC, "x", 1) == 1);
-	CHECK(*first == FIRST_DATA_BLOCK + 2);
+	CHECK(only_block() == FIRST_DATA_BLOCK + 2);
+	check_blocks();
+}
+
+/*
+ * A version 1 image: the superblock, and files built by v1_file().
+ * 版本 1 的映像: 超级块, 以及由 v1_file() 构造的文件.
+ */
+static void v1_format(void)
+{
+	memset(eeprom, 0xff, sizeof(eeprom));
+	memcpy(eeprom, "LXFS", 4);
+	eeprom[VERSION_OFF] = 1;
+}
+
+/*
+ * entry @index: @size bytes of @fill in the @n blocks of @chain
+ * 目录项 @index: 在 @chain 的 @n 个块中存放 @size 个 @fill 字节
+ */
+static void v1_file(int index, const char *name, const uint8_t *chain, int n,
+		    uint16_t size, char fill)
+{
+	int i;
+
+	dirent_poke(index, name, n ? chain[0] : 0xff, size);
+	for (i = 0; i < n; i++) {
+		eeprom[FAT_OFF + chain[i]] = i + 1 < n ? chain[i + 1] : 0xfe;
+		memset(eeprom + chain[i] * BLOCK, fill, BLOCK);
+	}
+}
+
+static const uint8_t chain_a[] = { 9, 15, 10 };
+static const uint8_t chain_b[] = { 11 };
+static const uint8_t chain_c[] = { 16 };
+
+/*
+ * /a in blocks 9, 15 and 10, which the log now takes, /b with a size
+ * still in the version 1 log, and /c.  The bytes of /a read as tags of
+ * /b, should the upgrade leave them in the log.
+ *
+ * /a 位于第 9、15、10 块, 其中两块现由日志占用; /b 的大小仍在版本 1 的日志
+ * 中; 以及 /c. /a 的字节若被升级留在日志中, 会被读作 /b 的标记.
+ */
+#define A_FILL	2
+static void v1_image(void)
+{
+	v1_format();
+	v1_file(0, "a", chain_a, 3, 80, A_FILL);
+	v1_file(2, "b", chain_b, 1, 20, 'b');
+	v1_file(5, "c", chain_c, 1, 5, 'c');
+	eeprom[FAT_OFF] = 2;
+	eeprom[FAT_OFF + 1] = 30;
+	eeprom[FAT_OFF + 2] = 0;
+}
+
+/*
+ * Static, as the buffers of upgrade_tests(): with check_blocks() below
+ * them the stack outgrows the ATmega2560 of "make check-qemu".
+ *
+ * 与 upgrade_tests() 的缓冲区相同, 声明为静态: 连同其下的 check_blocks(),
+ * 栈会超出 "make check-qemu" 所用 ATmega2560 的 SRAM.
+ */
+static char v1_buf[DATA_BYTES];
+
+static void check_v1_files(void)
+{
+	char *buf = v1_buf;
+	int i;
+
+	CHECK(eeprom[VERSION_OFF] == 2);
+	CHECK(file_get("/a", buf) == 80);
+	for (i = 0; i < 80 && buf[i] == A_FILL; i++)
+		;
+	CHECK(i == 80);
+	CHECK(file_get("/b", buf) == 30 && buf[29] == 'b');
+	CHECK(file_get("/c", buf) == 5 && buf[4] == 'c');
+	check_blocks();
+}
+
+static void op_mount(void) { lxfs_init(ee_read, ee_write); }
+
+static void upgrade_tests(void)
+{
+	static const uint8_t full[DATA_BLOCKS + 2] = {
+		9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+		21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+	};
+	static const uint8_t loop[] = { 9, 12 };
+	static uint8_t copy[EEPROM_SIZE];
+	char *buf = v1_buf;
+	long n;
+	int done = 0, ret;
+
+	v1_image();
+	CHECK(lxfs_init(ee_read, ee_write) == LXFS_UPGRADED);
+	check_v1_files();
+	CHECK(lxfs_init(ee_read, ee_write) == LXFS_CLEAN);
+	check_v1_files();
+
+	/*
+	 * a reset after every changed byte of the upgrade
+	 * 升级过程中每个变化字节之后复位
+	 */
+	for (n = 0; !done; n++) {
+		v1_image();
+		done = run_until_reset(op_mount, n);
+		ret = lxfs_init(ee_read, ee_write);
+		CHECK(ret == LXFS_UPGRADED || ret == LXFS_CLEAN ||
+		      ret == LXFS_REPAIRED);
+		check_v1_files();
+	}
+
+	/*
+	 * 21 blocks fit after the move, 23 do not and are left as they are
+	 * 21 块在移动后放得下; 23 块放不下, 保持原样
+	 */
+	v1_format();
+	v1_file(0, "full", full, DATA_BLOCKS, DATA_BLOCKS * BLOCK, 'f');
+	CHECK(lxfs_init(ee_read, ee_write) == LXFS_UPGRADED);
+	CHECK(file_get("/full", buf) == DATA_BYTES && buf[DATA_BYTES - 1] == 'f');
+	CHECK(lxfs_free() == 0);
+	check_blocks();
+	v1_format();
+	v1_file(0, "full", full, DATA_BLOCKS + 2, 736, 'f');
+	memcpy(copy, eeprom, sizeof(copy));
+	CHECK(lxfs_init(ee_read, ee_write) == -ENOSPC);
+	CHECK(!memcmp(copy, eeprom, sizeof(copy)));
+
+	/*
+	 * a chain that loops through block 9, from an earlier kernel
+	 * 早期内核留下的、经过第 9 块成环的链
+	 */
+	v1_format();
+	v1_file(0, "loop", loop, 2, 200, 'l');
+	eeprom[FAT_OFF + 12] = 9;
+	ret = lxfs_init(ee_read, ee_write);
+	CHECK(ret == LXFS_UPGRADED);
+	CHECK(file_get("/loop", buf) == 64 && buf[63] == 'l');
 	check_blocks();
 }
 
@@ -313,8 +498,8 @@ static void repair_tests(void)
 	lxfs_init(ee_read, ee_write);
 	memset(buf, 'x', 32);
 	file_put("/t", O_CREAT, buf, 32);
-	eeprom[FAT_OFF + 9] = 10;
-	eeprom[FAT_OFF + 10] = 0xfe;
+	eeprom[FAT_OFF + 11] = 12;
+	eeprom[FAT_OFF + 12] = 0xfe;
 	CHECK(lxfs_init(ee_read, ee_write) == LXFS_REPAIRED);
 	file_put("/t", O_APPEND, "0123456789", 10);
 	CHECK(file_get("/t", buf) == 42 && !memcmp(buf + 32, "0123456789", 10));
@@ -356,7 +541,7 @@ static void repair_tests(void)
 	memset(eeprom, 0xff, sizeof(eeprom));
 	lxfs_init(ee_read, ee_write);
 	file_put("/keep", O_CREAT, "data", 4);
-	eeprom[4] = 2;
+	eeprom[VERSION_OFF] = 3;
 	memcpy(copy, eeprom, sizeof(copy));
 	CHECK(lxfs_init(ee_read, ee_write) == -EINVAL);
 	CHECK(fs_open(&f, "/keep", O_RDONLY) == -EIO);
@@ -364,7 +549,23 @@ static void repair_tests(void)
 	CHECK(lxfs_unlink("/keep") == -EIO);
 	CHECK(lxfs_free() == 0);
 	CHECK(!memcmp(copy, eeprom, sizeof(copy)));
-	eeprom[4] = 1;
+	eeprom[VERSION_OFF] = 2;
+
+	/*
+	 * a file created where a removed one left records in the log
+	 * 在被删除的文件于日志中留有记录的目录项上创建文件
+	 */
+	memset(eeprom, 0xff, sizeof(eeprom));
+	lxfs_init(ee_read, ee_write);
+	file_put("/x", O_CREAT, "12345", 5);
+	CHECK(lxfs_unlink("/x") == 0);
+	CHECK(file_put("/y", O_CREAT, "", 0) == 0);
+	CHECK(file_get("/y", buf) == 0);
+	CHECK(lxfs_init(ee_read, ee_write) == LXFS_CLEAN);
+	CHECK(file_get("/y", buf) == 0);
+	CHECK(file_put("/y", O_APPEND, "ab", 2) == 2);
+	CHECK(file_get("/y", buf) == 2 && !memcmp(buf, "ab", 2));
+	check_blocks();
 
 	/*
 	 * a name the directory would read as a free entry
@@ -387,7 +588,7 @@ int main(void)
 	CHECK(writes == 5);
 	CHECK(lxfs_init(ee_read, ee_write) == LXFS_CLEAN);
 	free_before = lxfs_free();
-	CHECK(free_before == 736);
+	CHECK(free_before == DATA_BYTES);
 	CHECK(count_files() == 0);
 
 	/*
@@ -463,14 +664,25 @@ int main(void)
 	CHECK(lxfs_init(ee_read, ee_write) == LXFS_CLEAN);
 	CHECK(count_files() == 16);
 
-	crash_tests();
+	/*
+	 * Each rewrite of /d adds two records, so the log goes round more
+	 * than twice: every slot is the head under either phase, and
+	 * records of /a and /b are copied back to their entries.
+	 *
+	 * 每次改写 /d 增加两条记录, 日志因此绕过两圈以上: 每个槽都在两种相位下
+	 * 成为写入位置, /a 与 /b 的记录也被复制回其目录项.
+	 */
+	for (churn = 0; churn <= 20; churn++)
+		crash_tests();
+	churn = 0;
 	repair_tests();
+	upgrade_tests();
 	wear_tests();
 
 	if (fails) {
 		printf("lxfs: %d failed\n", fails);
 		return 1;
 	}
-	printf("lxfs: all passed, %u EEPROM bytes written\n", writes);
+	printf("lxfs: all passed, %lu EEPROM bytes written\n", writes);
 	return 0;
 }

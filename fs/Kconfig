@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-only
+menu "File systems"
+
+config LXFS_V1_UPGRADE
+	bool "Upgrade lxfs version 1 in place"
+	default y
+	help
+	  Kernels up to the one that added the lxfs log wrote version 1,
+	  which kept file data in the blocks the log now takes.  With this
+	  option the first mount moves those blocks and writes version 2;
+	  without it a device holding version 1 is left as it is and not
+	  mounted.  The upgrade takes about 950 bytes of flash on the AVR,
+	  which can be had back once no device holds version 1.
+
+endmenu
