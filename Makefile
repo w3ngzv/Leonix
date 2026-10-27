@@ -73,7 +73,8 @@ OBJDUMP := avr-objdump
 NM      := avr-nm
 SIZE    := avr-size
 
-CPPFLAGS := -DF_CPU=$(F_CPU) -Iinclude -include include/leonix/kconfig.h
+CPPFLAGS := -DF_CPU=$(F_CPU) -Iinclude -Iarch/$(SRCARCH)/include \
+	    -include include/leonix/kconfig.h
 CFLAGS   := -mmcu=$(MCU) -std=c11 -Os -g -Wall -Wextra -Werror
 ASFLAGS  := -mmcu=$(MCU) -g -Wall -Werror
 # SRAM layout, see include/leonix/memlayout.h; data addresses carry the

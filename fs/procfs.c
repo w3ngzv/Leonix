@@ -20,11 +20,11 @@
  *   kmsg     内核日志, 从最旧的开始, 格式为 "[秒] 文本"
  *   uptime   开机以来的秒数及其中空闲的秒数, 格式与 Linux 相同
  */
-#include <avr/pgmspace.h>
+#include <leonix/pgmspace.h>
 #include <string.h>
-#include <util/atomic.h>
 
 #include <leonix/errno.h>
+#include <leonix/irqflags.h>
 #include <leonix/jiffies.h>
 #include <leonix/kernel.h>
 #include <leonix/printk.h>
@@ -89,14 +89,15 @@ static uint8_t __attribute__((noinline)) kmsg_line(uint8_t n)
 
 static uint8_t __attribute__((noinline)) uptime_line(uint8_t n)
 {
+	unsigned long flags;
 	uint32_t now, idle;
 
 	if (n)
 		return 0;
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		now = get_jiffies();
-		idle = sched_idle_ticks();
-	}
+	local_irq_save(flags);
+	now = get_jiffies();
+	idle = sched_idle_ticks();
+	local_irq_restore(flags);
 	return snprintk(line, sizeof(line), "%lu.%02u %lu.%02u\n",
 			now / HZ, (uint8_t)(now % HZ / CENTI),
 			idle / HZ, (uint8_t)(idle % HZ / CENTI));

@@ -7,7 +7,7 @@
  * /bin: flash 中的只读文件系统, 由 tools/mkromfs.py 将 Leonix_coreutils
  * 构建出的程序打包而成, 与 Linux 把最初的程序放在 initramfs 中的做法相同.
  */
-#include <avr/pgmspace.h>
+#include <leonix/pgmspace.h>
 #include <string.h>
 
 #include <leonix/errno.h>

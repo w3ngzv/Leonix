@@ -8,9 +8,9 @@
  * 调度器. 状态任务在 LCD 上显示运行时间与空闲比例, 并把栈用量写入日志.
  */
 #include <avr/io.h>
-#include <avr/pgmspace.h>
-#include <util/atomic.h>
+#include <leonix/pgmspace.h>
 
+#include <leonix/irqflags.h>
 #include <leonix/jiffies.h>
 #include <leonix/kernel.h>
 #include <leonix/lcd.h>
@@ -137,6 +137,7 @@ static void lcd_task(void)
 {
 	uint32_t now, next_update, next_retry, next_blink;
 	uint32_t last_jiffies, last_idle, idle_now;
+	unsigned long flags;
 	int online, err;
 
 	PORTB |= 1 << PORTB0;
@@ -161,10 +162,10 @@ static void lcd_task(void)
 			 * 也在该时间段内; I2C 驱动在传输期间睡眠, 刷新的大部分
 			 * 时间是空闲.
 			 */
-			ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-				now = get_jiffies();
-				idle_now = sched_idle_ticks();
-			}
+			local_irq_save(flags);
+			now = get_jiffies();
+			idle_now = sched_idle_ticks();
+			local_irq_restore(flags);
 			report_stack_usage();
 			err = lcd_check();
 			if (err == 0) {

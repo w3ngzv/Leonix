@@ -16,7 +16,7 @@
  *
  * 根目录先列出其他挂载点, 再列出根文件系统 lxfs 中的文件.
  */
-#include <avr/pgmspace.h>
+#include <leonix/pgmspace.h>
 #include <stddef.h>
 #include <string.h>
 
