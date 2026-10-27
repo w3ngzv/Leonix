@@ -179,6 +179,14 @@ static uint8_t mounted;
  */
 static uint8_t next_block;
 /*
+ * where a create starts looking for a free directory entry, for the same
+ * reason: creating and removing a file writes the first byte of its name
+ *
+ * 新建文件时开始查找空闲目录项的位置, 理由相同: 新建与删除文件都写名字的
+ * 第一个字节
+ */
+static uint8_t next_dirent;
+/*
  * the slot the next record goes into, and the phase it is tagged with
  * 下一条记录写入的槽, 以及该记录标记中的相位
  */
@@ -459,10 +467,12 @@ static uint8_t alloc_block(void)
 }
 
 /*
- * point next_block past the highest data block in use
- * 使 next_block 指向使用中的最高数据块之后
+ * point next_block past the highest data block in use, next_dirent past
+ * the highest entry in use
+ * 使 next_block 指向使用中的最高数据块之后, next_dirent 指向使用中的最高
+ * 目录项之后
  */
-static void find_next_block(void)
+static void find_cursors(void)
 {
 	uint8_t b;
 
@@ -470,6 +480,30 @@ static void find_next_block(void)
 	for (b = LXFS_DATA_FIRST; b < LXFS_BLOCKS; b++)
 		if (fat_get(b) != LXFS_FREE)
 			next_block = b + 1;
+	next_dirent = 0;
+	for (b = 0; b < LXFS_FILES; b++)
+		if (entry_used(b))
+			next_dirent = b + 1;
+}
+
+/*
+ * a free directory entry, or -ENOSPC
+ * 取一个空闲目录项; 没有时返回 -ENOSPC
+ */
+static int alloc_dirent(void)
+{
+	uint8_t i = next_dirent, n;
+
+	for (n = LXFS_FILES; n; n--) {
+		if (i >= LXFS_FILES)
+			i = 0;
+		if (!entry_used(i)) {
+			next_dirent = i + 1;
+			return i;
+		}
+		i++;
+	}
+	return -ENOSPC;
 }
 
 static int lxfs_write(struct file *f, const char *buf, uint8_t count)
@@ -618,11 +652,9 @@ int lxfs_open(struct file *f, const char *rest, uint16_t flags)
 	if (index < 0) {
 		if (!(flags & O_CREAT))
 			return -ENOENT;
-		for (index = 0; index < LXFS_FILES; index++)
-			if (!entry_used(index))
-				break;
-		if (index == LXFS_FILES)
-			return -ENOSPC;
+		index = alloc_dirent();
+		if (index < 0)
+			return index;
 		/*
 		 * a record left by a file once at this index would
 		 * override the new entry
@@ -963,7 +995,7 @@ int lxfs_init(lxfs_read_fn read, lxfs_write_fn write)
 		log_scan();
 		if (lxfs_check() && ret == LXFS_CLEAN)
 			ret = LXFS_REPAIRED;
-		find_next_block();
+		find_cursors();
 		return ret;
 	}
 
@@ -980,6 +1012,7 @@ int lxfs_init(lxfs_read_fn read, lxfs_write_fn write)
 	log_head = 0;
 	log_phase = 0;
 	next_block = LXFS_DATA_FIRST;
+	next_dirent = 0;
 	mounted = 1;
 	return LXFS_FORMATTED;
 }
