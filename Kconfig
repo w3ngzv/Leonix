@@ -5,7 +5,7 @@
 #
 # 本配置文件的语法见 Linux 的 Documentation/kbuild/kconfig-language.rst.
 #
-mainmenu "Leonix Kernel Configuration"
+mainmenu "Leonix/$(ARCH) Kernel Configuration"
 
 source "arch/Kconfig"
 
