@@ -1,8 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0-only
 menu "Device Drivers"
 
+config EEPROM_LXFS
+	def_bool AVR
+	help
+	  lxfs on the ATmega32U4's EEPROM, in drivers/eeprom.c.
+
 config I2C
 	bool "I2C bus master"
+	depends on AVR
 	help
 	  The ATmega32U4's two-wire interface as an I2C bus master, on D2
 	  (SDA) and D3 (SCL), in arch/avr/i2c.c.  Only the HD44780 display
@@ -21,6 +27,7 @@ config HD44780
 
 config SWD
 	bool "Serial Wire Debug host"
+	depends on AVR
 	help
 	  An SWD host on D8 (SWCLK) and D9 (SWDIO), for reading the
 	  identification registers of an STM32F1 through /dev/swd.

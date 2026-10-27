@@ -145,6 +145,19 @@ uint8_t sched_task_state(uint8_t index)
 }
 
 /**
+ * sched_current() - the running task, as panic() names it
+ *
+ * 正在运行的任务, 采用 panic() 的编号方式.
+ *
+ * Return: its index, or PANIC_IDLE_TASK for the idle task.
+ * 返回任务编号; 空闲任务返回 PANIC_IDLE_TASK.
+ */
+uint8_t sched_current(void)
+{
+	return current == &idle_task ? PANIC_IDLE_TASK : current_index;
+}
+
+/**
  * task_create() - add a task
  * @entry: the function the task runs; its return ends the task
  * @stack: the task's stack

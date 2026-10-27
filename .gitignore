@@ -2,6 +2,7 @@
 *.d
 *.elf
 *.hex
+/leonix.bin
 *.map
 *.lst
 *.log

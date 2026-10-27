@@ -17,19 +17,28 @@ config AVR
 	  Leonix runs on the ATmega32U4 of the Arduino Leonardo, behind the
 	  Caterina bootloader.
 
+config ARM
+	bool "ARM: STM32F103 (Cortex-M3)"
+	help
+	  Leonix runs on an STM32F103C8 such as the Blue Pill, from the
+	  start of its Flash, with USART1 on PA9 and PA10 as the console.
+
 endchoice
 
 config SYS_ARCH
 	string
 	default "avr" if AVR
+	default "arm" if ARM
 	help
 	  The directory under arch/ that the kernel is built from.
 
 config INIT_CONSOLE
 	string "Terminal that init opens for /bin/sh"
 	default "ttyACM0" if AVR
+	default "ttyS0" if ARM
 	help
 	  The name in /dev of the terminal that becomes standard input
 	  and output of /bin/sh.
 
 source "arch/avr/Kconfig"
+source "arch/arm/Kconfig"

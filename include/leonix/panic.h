@@ -8,6 +8,7 @@
  */
 #define PANIC_STACK_OVERFLOW	1
 #define PANIC_BAD_INTERRUPT	2
+#define PANIC_FAULT		3	/* a Cortex-M fault; Cortex-M 的故障 */
 
 /*
  * second argument of panic() when no single task is to blame
