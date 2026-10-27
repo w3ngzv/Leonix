@@ -191,6 +191,19 @@ static uint8_t next_dirent;
  * 下一条记录写入的槽, 以及该记录标记中的相位
  */
 static uint8_t log_head, log_phase;
+/*
+ * The slot of the newest record of entry cache_index, or LXFS_FREE if
+ * it has none; lxfs_init() sets cache_index to LXFS_FREE, which caches
+ * nothing.  The virtual machine fetches each code byte through
+ * dirent_get(), which would otherwise read all LOG_SLOTS tags once the
+ * program's record has left the log.  log_append() keeps the pair true.
+ *
+ * 目录项 cache_index 最新记录所在的槽; 没有记录时为 LXFS_FREE. lxfs_init()
+ * 把 cache_index 设为 LXFS_FREE, 即不缓存任何目录项. 虚拟机经由 dirent_get()
+ * 取每个代码字节, 程序的记录离开日志之后, 若无此缓存, 每次都要读完 LOG_SLOTS
+ * 个标记. log_append() 负责使两者保持一致.
+ */
+static uint8_t cache_index, cache_slot;
 
 static uint8_t fat_get(uint8_t block)
 {
@@ -257,12 +270,13 @@ static void dirent_raw(uint8_t index, struct lxfs_dirent *de)
  */
 static void dirent_get(uint8_t index, struct lxfs_dirent *de)
 {
-	uint8_t slot;
-
 	dirent_raw(index, de);
-	slot = log_find(index, LOG_SLOTS);
-	if (slot != LXFS_FREE)
-		dev_read(LOG_RECS + slot * LOG_REC,
+	if (index != cache_index) {
+		cache_slot = log_find(index, LOG_SLOTS);
+		cache_index = index;
+	}
+	if (cache_slot != LXFS_FREE)
+		dev_read(LOG_RECS + cache_slot * LOG_REC,
 			 (uint8_t *)de + DIRENT_FIRST, LOG_REC);
 }
 
@@ -312,6 +326,15 @@ static void log_append(uint8_t index, uint8_t first, uint16_t size)
 	}
 	dev_write(LOG_RECS + log_head * LOG_REC, rec, LOG_REC);
 	tag_set(log_head, log_phase | index);
+	/*
+	 * the record replaced here, if it was cache_index's newest, has just
+	 * been copied to its entry
+	 * 此处被替换的记录若是 cache_index 最新的记录, 刚已复制到其目录项
+	 */
+	if (index == cache_index)
+		cache_slot = log_head;
+	else if (cache_slot == log_head)
+		cache_slot = LXFS_FREE;
 	log_head = (log_head + 1) & (LOG_SLOTS - 1);
 	if (!log_head)
 		log_phase ^= TAG_PHASE;
@@ -980,6 +1003,7 @@ int lxfs_init(lxfs_read_fn read, lxfs_write_fn write)
 	dev_read = read;
 	dev_write = write;
 	mounted = 0;
+	cache_index = LXFS_FREE;
 	dev_read(SB_OFF, sb, sizeof(sb));
 	if (!memcmp(sb, lxfs_magic, sizeof(lxfs_magic))) {
 		ret = LXFS_CLEAN;
