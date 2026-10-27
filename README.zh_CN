@@ -45,14 +45,15 @@ Leonix 运行时, make flash 自行使板子复位进入 bootloader. 板上是�
 STM32F103
 ---------
 
-	make stm32f103_defconfig
-	make
-	make flash
+	make ARCH=arm stm32f103_defconfig
+	make ARCH=arm
+	make ARCH=arm flash
 
 为 Blue Pill 等 STM32F103C8 核心板构建 leonix.elf, 并经 ST-LINK 由 OpenOCD
 写入. 控制台为 USART1, 115200 波特, TX 为 PA9, RX 为 PA10, 在 /dev 中为
 ttyS0; lxfs 保存在 Flash 的最后 8 KiB. 构建需要 arm-none-eabi-gcc, 不需要
-C 库. "make qemu" 在 QEMU 的 stm32vldiscovery 上运行同一映像, "make
+C 库. 架构与 Linux 相同, 每条 make 命令都带 ARCH=, 或者导出一次. "make
+ARCH=arm qemu" 在 QEMU 的 stm32vldiscovery 上运行同一映像, "make ARCH=arm
 check-boot" 驱动其 shell. 截至 2026-10-27, 该移植只在 QEMU 中运行过, 尚未在
 板上运行. 详见 Documentation/stm32f103.rst.
 
