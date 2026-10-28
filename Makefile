@@ -128,9 +128,13 @@ config:
 	$(scripts_kconfig) conf
 	$(KCONF) --oldaskconfig Kconfig
 
-menuconfig nconfig:
-	$(scripts_kconfig) $(@:config=conf)
-	scripts/kconfig/$(@:config=conf) Kconfig
+menuconfig:
+	$(scripts_kconfig) mconf
+	scripts/kconfig/mconf Kconfig
+
+nconfig:
+	$(scripts_kconfig) nconf
+	scripts/kconfig/nconf Kconfig
 
 oldconfig olddefconfig allyesconfig allnoconfig alldefconfig listnewconfig \
 syncconfig:
