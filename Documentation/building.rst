@@ -136,10 +136,18 @@ scripts/kconfig, 编译它需要主机上的 bison、flex 与 ncurses. Leonix �
 默认配置 arch/avr/configs/leonardo_defconfig 打开 SWD 驱动, 关闭 I2C 与
 HD44780 液晶屏. 没有 .config 时 ``make`` 停下并提示先运行配置工具.
 
-架构同样是 .config 中的选项, 由 arch/Kconfig 的选择项决定, 与 U-Boot 的
-做法相同, 不像 Linux 那样每次以 ``ARCH=`` 传入. ``make stm32f103_defconfig``
-选择 STM32F103, ``make`` 随后从 arch/arm/config.mk 取得工具链与映像规则.
-defconfig 在所有 arch/\*/configs 目录中查找.
+架构与 Linux 相同, 由 make 命令行或环境变量中的 ``ARCH=`` 给出, 默认为 avr.
+为 STM32F103 构建时, 每条 make 命令都带 ``ARCH=arm``, 或者先在 shell 中
+``export ARCH=arm``::
+
+  make ARCH=arm stm32f103_defconfig
+  make ARCH=arm
+
+``make defconfig`` 取当前架构的默认配置, 即 arch/$(ARCH)/config.mk 中的
+KBUILD_DEFCONFIG. defconfig 只在 arch/$(ARCH)/configs 中查找, 找不到时错误
+信息指出它属于哪个架构. Linux 允许把为一个架构生成的 .config 直接用于另一个
+架构, syncconfig 不加提示地丢弃对方没有的选项; Leonix 在这种情况下停止并报告
+``.config was not made for ARCH=...``.
 
 修改配置的目标:
 
@@ -157,7 +165,7 @@ defconfig 在所有 arch/\*/configs 目录中查找.
 
 ``make savedefconfig``
   把当前配置写成最小形式的 defconfig 文件, 用于更新
-  arch/avr/configs/leonardo_defconfig.
+  arch/$(ARCH)/configs 中的默认配置.
 
 配置改变之后, ``make`` 自动运行 syncconfig, 重新生成
 include/config/auto.conf 与 include/generated/autoconf.h, 并重新编译受影响

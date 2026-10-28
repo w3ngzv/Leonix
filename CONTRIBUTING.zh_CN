@@ -46,7 +46,7 @@ avr-gcc 的 int 为 16 位, 中断与任务共享 2.5 KiB SRAM, EEPROM 可能在
 改变固件映像的改动, 对映像发生变化的每个架构, 在提交说明中写出改动前后的
 大小: Leonardo 用 avr-size, STM32F103 用 arm-none-eabi-size. 改动 arch/avr、
 arch/arm 或 drivers 时, 写明是否在板上运行过, 以及在板上检查了什么. 两个架构
-共用的代码须为两者分别构建, STM32 的构建以 "make check-boot" 运行.
+共用的代码须为两者分别构建, STM32 的构建以 "make ARCH=arm check-boot" 运行.
 
 
 提交

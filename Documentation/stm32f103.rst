@@ -434,15 +434,16 @@ DBGMCU_IDCODE, 其低 12 位为 0x410 表示中容量器件 (RM0008 31.6.1). 本
 ===========
 
 arch/arm 与 Leonardo 的 arch/avr 共用 kernel/、fs/、drivers/ 中与芯片无关的
-部分, 以及 /bin 中的程序. 架构是 .config 中的一个选项 (arch/Kconfig), 构建::
+部分, 以及 /bin 中的程序. 架构与 Linux 相同, 由每条 make 命令的 ARCH= 给出,
+见 building.rst 的 "配置" 一节. 构建::
 
-  make stm32f103_defconfig
-  make
+  make ARCH=arm stm32f103_defconfig
+  make ARCH=arm
 
 生成 leonix.elf 与 leonix.bin. 工具链为 arm-none-eabi-gcc, 安装命令见下文
 "安装工具". 内核不链接 C 库, 用到的字符串函数由 lib/string.c 提供, 因此
 Homebrew 提供的不带 newlib 的工具链同样可以构建. 与 Leonardo 共用一个工作区
-时, 切换架构只需运行另一个 defconfig; 每个目标文件都依赖
+时, 切换架构需要以另一个 ARCH 运行其 defconfig; 每个目标文件都依赖
 include/generated/autoconf.h, 随之全部重新编译.
 
 板上用到的引脚与设置:
@@ -465,7 +466,7 @@ lxfs. 该芯片没有 EEPROM, lxfs 在 Flash 上以四个 2 KiB 的槽轮流保�
 
 烧录经 ST-LINK 与 OpenOCD, 接线见上一节::
 
-  make flash
+  make ARCH=arm flash
 
 该目标运行 OpenOCD 的 ``program``, 其中的 ``flash write_image erase`` 只擦除
 映像各段所在的扇区以及段之间的空隙 (OpenOCD 0.12.0 手册 "flash write_image"
@@ -474,8 +475,8 @@ lxfs. 该芯片没有 EEPROM, lxfs 在 Flash 上以四个 2 KiB 的槽轮流保�
 
 没有板子时, 同一个 leonix.elf 可以在 QEMU 的 stm32vldiscovery 机型上运行::
 
-  make qemu         # 交互运行, 按 Ctrl-A 再按 X 退出
-  make check-boot   # tests/qemu_boot.py: 启动并逐条核对 shell 命令的输出
+  make ARCH=arm qemu        # 交互运行, 按 Ctrl-A 再按 X 退出
+  make ARCH=arm check-boot  # tests/qemu_boot.py: 启动并核对 shell 的输出
 
 该机型与板子的差别见下一节. 对 Leonix 有影响的有三处. RCC 未实现, 时钟初始化
 总是留在 HSI 路径上. Flash 的擦除与编程被忽略, 驱动发现读回的值不符, 记录
