@@ -46,4 +46,13 @@ config SWD_DAP
 	  command per line written to /dev/dap, for a script on the host.
 	  Also measures a square wave on D13 with Timer3.
 
+config TTP229
+	bool "TTP229 touch keypad"
+	depends on AVR
+	help
+	  A TTP229 16-key capacitive keypad, such as the HW-136 board, on
+	  A0 (SCL) and A1 (SDO), as /dev/keypad.  Each read returns one
+	  character per key touched, '1' to '9' and 'a' to 'g' for keys 1
+	  to 16.  The board must be set to 16-key mode, P1 pin 3 shorted.
+
 endmenu
