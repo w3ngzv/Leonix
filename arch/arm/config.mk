@@ -66,4 +66,11 @@ qemu: $(TARGET).elf
 check-boot: $(TARGET).elf
 	$(PYTHON) tests/qemu_boot.py --qemu $(QEMU_ARM) $<
 
+define archhelp
+  echo  '* leonix.bin    - Raw image for the start of the flash'
+  echo  '  flash         - Write leonix.elf through an ST-LINK/V2 with OpenOCD'
+  echo  '  qemu          - Run leonix.elf on qemu-system-arm stm32vldiscovery'
+  echo  '  check-boot    - Boot and shell test on the same machine'
+endef
+
 .PHONY: flash qemu check-boot
