@@ -6,3 +6,4 @@
 #
 
 obj-y += vsprintf.o
+obj-$(CONFIG_ARM) += string.o

@@ -46,9 +46,12 @@ Run these before sending.  All of them must pass:
 A change to the filesystem's write paths needs a case in the reset test
 of tests/test_lxfs.c, which cuts power at every byte of an operation.
 
-A change that alters the image states the avr-size output before and
-after in the commit message.  A change to arch/avr or drivers says
-whether it was run on a board, and what was checked there.
+A change that alters an image states the size output before and after
+in the commit message, avr-size for the Leonardo and arm-none-eabi-size
+for the STM32F103, for each architecture whose image changes.  A change
+to arch/avr, arch/arm or drivers says whether it was run on a board,
+and what was checked there.  Code shared by both architectures is built
+for both, and the STM32 build is run with "make check-boot".
 
 
 Commits

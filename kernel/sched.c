@@ -11,20 +11,11 @@
  * 准. 睡眠的任务在唤醒时间之前被跳过; 所有任务都在睡眠时, 空闲任务使 CPU 进入
  * Idle 模式, 直到下一个中断.
  */
-#include <avr/interrupt.h>
-#include <avr/sleep.h>
-#include <util/atomic.h>
-
+#include <leonix/irqflags.h>
 #include <leonix/jiffies.h>
 #include <leonix/panic.h>
 #include <leonix/sched.h>
 #include <leonix/wait.h>
-
-/*
- * r1..r31, saved below r0 and SREG in the frame
- * 栈帧中保存在 r0 与 SREG 之下的 r1..r31
- */
-#define NR_SAVED_GPRS	31
 
 /*
  * Written at the lowest two bytes of every stack.  The stack grows down,
@@ -49,15 +40,6 @@
  */
 #define STACK_FILL	0xa5
 #define STACK_CANARY_SIZE	2
-
-#define IDLE_STACK_SIZE	72
-
-/*
- * idle() needs task_exit()'s return address and a 2-byte frame
- * idle() 需要 task_exit() 的返回地址与 2 字节的栈帧
- */
-_Static_assert(TASK_STACK_RESERVE + 4 <= IDLE_STACK_SIZE,
-	       "idle stack too small for the switch frame");
 
 static struct task tasks[MAX_TASKS];
 static uint8_t nr_tasks;
@@ -85,50 +67,23 @@ static void task_exit(void)
 }
 
 /*
- * Lay out @stack so that the restore path in switch.S, followed by reti,
- * enters @entry with interrupts enabled.  From the top down: task_exit()
- * as @entry's return address, @entry as the address reti returns to,
- * then r0, SREG and r1..r31.  Return addresses are stored high byte at
- * the lower address, as CALL leaves them.
+ * Fill @stack and lay out the frame from which the arch's restore path
+ * enters @entry, with task_exit() as its return address.
  *
- * 布置 @stack, 使 switch.S 的恢复路径与随后的 reti 在中断打开的状态下进入
- * @entry. 自栈顶向下依次为: 作为 @entry 返回地址的 task_exit(), 作为 reti 返回
- * 地址的 @entry, 然后是 r0、SREG 与 r1..r31. 返回地址的高字节存放在低地址, 与
- * CALL 指令留下的顺序相同.
+ * 填充 @stack, 并布置一个栈帧, 架构的恢复路径由该栈帧进入 @entry, 以
+ * task_exit() 为其返回地址.
  */
 static void task_init(struct task *t, void (*entry)(void),
 		      uint8_t *stack, uint16_t size)
 {
-	uint16_t exit_pc = (uint16_t)task_exit;
-	uint16_t entry_pc = (uint16_t)entry;
-	uint8_t *sp = stack + size - 1;
 	uint16_t n;
-	uint8_t i;
 
 	for (n = STACK_CANARY_SIZE; n < size; n++)
 		stack[n] = STACK_FILL;
-
-	*sp-- = exit_pc & 0xff;
-	*sp-- = exit_pc >> 8;
-	*sp-- = entry_pc & 0xff;
-	*sp-- = entry_pc >> 8;
-	*sp-- = 0;			/* r0 */
-	/*
-	 * SREG with I clear, as in every frame saved inside the interrupt;
-	 * reti sets I.  Setting it here would enable interrupts one pop
-	 * early.
-	 *
-	 * SREG 的 I 位为 0, 与中断内保存的每个栈帧相同; reti 会置位 I. 在此置位
-	 * 会使中断提前一次出栈而打开.
-	 */
-	*sp-- = 0;
-	for (i = 0; i < NR_SAVED_GPRS; i++)
-		*sp-- = 0;		/* r1..r31; C 要求 r1 为 0 */
-
 	stack[0] = STACK_CANARY_LO;
 	stack[1] = STACK_CANARY_HI;
 
-	t->sp = sp;
+	t->sp = arch_task_frame(stack + size, entry, task_exit);
 	t->stack = stack;
 	t->state = TASK_RUNNABLE;
 }
@@ -178,14 +133,28 @@ uint16_t sched_stack_free(uint8_t index)
  */
 uint8_t sched_task_state(uint8_t index)
 {
+	unsigned long flags;
 	uint8_t state;
 
 	if (index >= nr_tasks)
 		return SCHED_NO_STATE;
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		state = tasks[index].state;
-	}
+	local_irq_save(flags);
+	state = tasks[index].state;
+	local_irq_restore(flags);
 	return state;
+}
+
+/**
+ * sched_current() - the running task, as panic() names it
+ *
+ * 正在运行的任务, 采用 panic() 的编号方式.
+ *
+ * Return: its index, or PANIC_IDLE_TASK for the idle task.
+ * 返回任务编号; 空闲任务返回 PANIC_IDLE_TASK.
+ */
+uint8_t sched_current(void)
+{
+	return current == &idle_task ? PANIC_IDLE_TASK : current_index;
 }
 
 /**
@@ -293,11 +262,12 @@ void scheduler_tick(void)
  */
 uint32_t sched_idle_ticks(void)
 {
+	unsigned long flags;
 	uint32_t ticks;
 
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		ticks = idle_ticks;
-	}
+	local_irq_save(flags);
+	ticks = idle_ticks;
+	local_irq_restore(flags);
 	return ticks;
 }
 
@@ -319,7 +289,7 @@ uint32_t sched_idle_ticks(void)
  */
 void sleep_until(uint32_t deadline)
 {
-	cli();
+	local_irq_disable();
 	current->wake_at = deadline;
 	current->state = TASK_SLEEPING;
 	arch_yield();
@@ -356,9 +326,9 @@ void __wait(struct wait_queue *wq, uint32_t deadline, uint8_t timed)
 	current->state = timed ? TASK_SLEEPING : TASK_BLOCKED;
 	arch_yield();
 
-	cli();
+	local_irq_disable();
 	wq->waiters &= ~bit;
-	sei();
+	local_irq_enable();
 }
 
 /**
@@ -379,21 +349,22 @@ void __wait(struct wait_queue *wq, uint32_t deadline, uint8_t timed)
  */
 uint8_t wake_up(struct wait_queue *wq)
 {
+	unsigned long flags;
 	uint8_t woken = 0;
 	uint8_t i;
 
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		for (i = 0; i < nr_tasks; i++) {
-			if (!(wq->waiters & (1 << i)))
-				continue;
-			if (tasks[i].state == TASK_SLEEPING ||
-			    tasks[i].state == TASK_BLOCKED) {
-				tasks[i].state = TASK_RUNNABLE;
-				woken++;
-			}
+	local_irq_save(flags);
+	for (i = 0; i < nr_tasks; i++) {
+		if (!(wq->waiters & (1 << i)))
+			continue;
+		if (tasks[i].state == TASK_SLEEPING ||
+		    tasks[i].state == TASK_BLOCKED) {
+			tasks[i].state = TASK_RUNNABLE;
+			woken++;
 		}
-		wq->waiters = 0;
 	}
+	wq->waiters = 0;
+	local_irq_restore(flags);
 	return woken;
 }
 
@@ -414,18 +385,17 @@ void msleep(uint16_t ms)
 }
 
 /*
- * Runs only when every other task sleeps or is dead.  In Idle mode the
- * CPU stops but Timer1 keeps counting (datasheet 7.1), and the next tick
- * wakes it into the interrupt that may switch to a woken task.
+ * Runs only when every other task sleeps or is dead.  arch_cpu_idle()
+ * stops the CPU until the next interrupt, which may switch to a woken
+ * task.
  *
- * 只在其他所有任务都在睡眠或已结束时运行. Idle 模式下 CPU 停止而 Timer1 继续计
- * 数 (数据手册 7.1), 下一个节拍把 CPU 唤醒并进入中断, 该中断可能切换到被唤醒的
- * 任务.
+ * 只在其他所有任务都在睡眠或已结束时运行. arch_cpu_idle() 使 CPU 停止到下一个
+ * 中断, 该中断可能切换到被唤醒的任务.
  */
 static void idle(void)
 {
 	for (;;)
-		sleep_mode();
+		arch_cpu_idle();
 }
 
 /**
@@ -440,8 +410,8 @@ static void idle(void)
  */
 void sched_start(void)
 {
-	cli();
-	set_sleep_mode(SLEEP_MODE_IDLE);
+	local_irq_disable();
+	arch_cpu_idle_prepare();
 	task_init(&idle_task, idle, idle_stack, sizeof(idle_stack));
 
 	current_index = 0;

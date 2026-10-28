@@ -5,6 +5,8 @@
 # 设备驱动的 Makefile.
 #
 
-obj-y += tty.o eeprom.o
+obj-y += tty.o
+obj-$(CONFIG_EEPROM_LXFS) += eeprom.o
+obj-$(CONFIG_FLASH_LXFS) += stm32_flash.o
 obj-$(CONFIG_HD44780) += lcd.o
 obj-$(CONFIG_SWD) += swd.o

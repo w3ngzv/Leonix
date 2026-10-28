@@ -285,6 +285,14 @@ OpenOCD-jep106.inc, OpenOCD-arm_coresight.h
 
   https://github.com/openocd-org/openocd/tree/master/src
 
+OpenOCD-0.12.0-manual.info-1
+  OpenOCD 0.12.0 用户手册的 Info 格式第一部分, 取自 Homebrew 安装的
+  share/info/openocd.info-1. stm32f103.rst 引用其中 "flash write_image" 一条:
+  带 erase 参数时, 擦除映像各段所在的扇区与段之间的空隙. 按 GNU Free
+  Documentation License 发布, 可以再分发, 为与本节其余文件一致仍不纳入仓库.
+  SHA-256 为
+  be3b8c4064e38eaa0bad8c53b8cb06ea5d864e3b8c6f8db58f7195b0a3aaa116.
+
 架构的历史资料
 --------------
 

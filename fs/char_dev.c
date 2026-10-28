@@ -9,7 +9,7 @@
  * 此处没有保存设备号的设备节点, 因此以名字区分. 驱动在 sched_start() 之前
  * 注册, 设备表因此不需要锁.
  */
-#include <avr/pgmspace.h>
+#include <leonix/pgmspace.h>
 #include <stddef.h>
 #include <string.h>
 
