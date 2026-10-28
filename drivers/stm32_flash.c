@@ -300,7 +300,7 @@ static void flash_dev_write(uint16_t off, const void *buf, uint16_t len)
 		return;
 	if (journal_append(off, len) < 0 && slot_write_next() < 0) {
 		flash_ok = 0;
-		printk("lxfs in RAM");
+		pr_notice("lxfs in RAM");
 	}
 }
 
@@ -382,7 +382,7 @@ static int flash_fs_init(void)
 
 	nr_slots = (__lxfs_flash_end - __lxfs_flash_start) / SLOT_BYTES;
 	if (nr_slots < 2) {
-		printk("no lxfs flash");
+		pr_err("no lxfs flash");
 		return -1;
 	}
 	newest = slot_newest();
@@ -403,13 +403,13 @@ static int flash_fs_init(void)
 	case LXFS_CLEAN:
 		break;
 	case LXFS_FORMATTED:
-		printk("mkfs lxfs");
+		pr_notice("mkfs lxfs");
 		break;
 	case LXFS_REPAIRED:
-		printk("lxfs repaired");
+		pr_warn("lxfs repaired");
 		break;
 	default:
-		printk("lxfs: unknown");
+		pr_err("lxfs: unknown");
 		break;
 	}
 	return 0;

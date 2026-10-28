@@ -13,6 +13,11 @@
 # of the first form: they are Linux's code, kept as Linux has it, and
 # checkpatch warns about Linux's own copy of the macros too.  So is
 # Documentation/references, which holds other projects' files verbatim.
+# include/leonix/kern_levels.h and include/leonix/printk.h are left out
+# of checkpatch alone: KERN_<LEVEL> are string literals that cannot take
+# the parentheses checkpatch asks for, and pr_<level>() is
+# printk(KERN_<LEVEL> ...); checkpatch reports both in Linux's
+# include/linux/kern_levels.h and include/linux/printk.h as well.
 # Exits 1 if any check reports a problem.  -g runs checkpatch alone.
 #
 # 检查代码风格: 使用取自 Linux 的 scripts/checkpatch.pl 与 scripts/kernel-doc,
@@ -22,6 +27,10 @@
 # 第一种用法不检查 scripts/kconfig 与 include/leonix/kconfig.h 中的宏: 这些是
 # Linux 的代码, 保持 Linux 的原样, 且 checkpatch 对 Linux 自身的这些宏同样报
 # 警告. Documentation/references 保存其他项目的原样文件, 同样不检查.
+# include/leonix/kern_levels.h 与 include/leonix/printk.h 只免于 checkpatch:
+# KERN_<LEVEL> 是字符串字面量, 加上 checkpatch 要求的括号就无法拼接, 而
+# pr_<level>() 即 printk(KERN_<LEVEL> ...); checkpatch 对 Linux 的
+# include/linux/kern_levels.h 与 include/linux/printk.h 同样报告这两处.
 # 任何一项检查报告问题时以 1 退出. -g 只运行 checkpatch.
 cd "$(dirname "$0")/.." || exit 1
 PYTHON=${PYTHON:-python3}
@@ -38,8 +47,17 @@ fi
 # Each grep succeeds only if it printed something, i.e. found a problem.
 # 每个 grep 只在打印了内容, 即发现问题时才成功.
 status=0
-scripts/checkpatch.pl --terse --show-types --summary-file -f "$@" |
-	grep -v ': total: 0 errors, 0 warnings,' && status=1
+cpfiles=
+for f; do
+	case $f in
+	include/leonix/kern_levels.h|include/leonix/printk.h) ;;
+	*) cpfiles="$cpfiles $f" ;;
+	esac
+done
+if [ -n "$cpfiles" ]; then
+	scripts/checkpatch.pl --terse --show-types --summary-file -f $cpfiles |
+		grep -v ': total: 0 errors, 0 warnings,' && status=1
+fi
 
 csrc=
 for f; do

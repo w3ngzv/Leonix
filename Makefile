@@ -207,11 +207,13 @@ TOOLCHAIN ?= $(CURDIR)/external/toolchain
 COREUTILS ?= external/coreutils
 PYTHON ?= python3
 LXASM := $(PYTHON) $(TOOLCHAIN)/lxasm.py
-TEST_BIN := tests/test_vsprintf tests/test_lxfs tests/test_vm tests/test_stm32_flash
+TEST_BIN := tests/test_vsprintf tests/test_printk tests/test_lxfs tests/test_vm \
+	tests/test_stm32_flash
 TEST_VM_PROGS := tests/vm/arith.lx tests/vm/fault.lx
 
 check: $(TEST_BIN) $(TEST_VM_PROGS)
 	./tests/test_vsprintf
+	./tests/test_printk
 	./tests/test_lxfs
 	./tests/test_vm
 	./tests/test_stm32_flash
@@ -226,6 +228,16 @@ tests/test_vm: tests/test_vm.c kernel/vm.c include/leonix/vm.h
 tests/test_vsprintf: tests/test_vsprintf.c lib/vsprintf.c include/leonix/kernel.h
 	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Itests/host -Iinclude -o $@ \
 		tests/test_vsprintf.c lib/vsprintf.c
+
+# The two CONFIG_ values are the defaults of lib/Kconfig.debug.
+#
+# 两个 CONFIG_ 值为 lib/Kconfig.debug 中的默认值.
+tests/test_printk: tests/test_printk.c kernel/printk.c lib/vsprintf.c \
+		include/leonix/printk.h include/leonix/kern_levels.h
+	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Itests/host -Iinclude \
+		-DCONFIG_CONSOLE_LOGLEVEL_DEFAULT=7 \
+		-DCONFIG_MESSAGE_LOGLEVEL_DEFAULT=4 -o $@ \
+		tests/test_printk.c kernel/printk.c lib/vsprintf.c
 
 tests/test_lxfs: tests/test_lxfs.c fs/lxfs.c include/leonix/lxfs.h include/leonix/fs.h
 	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Itests/host -Iinclude -o $@ \

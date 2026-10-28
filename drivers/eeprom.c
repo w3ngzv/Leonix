@@ -27,13 +27,15 @@ static void eeprom_dev_read(uint16_t off, void *buf, uint16_t len)
  * TODO: wait for each byte on the EE READY interrupt with a wait queue
  * rather than spinning on EEPE, which counts as busy time.
  *
- * TODO: wear levelling; lxfs writes its metadata to the same bytes every
- * time.
+ * TODO: wear levelling for the directory; lxfs writes the size and first
+ * block of a file to the same bytes every time, which costs data blocks
+ * to rotate.
  *
  * 待办: 以 EE READY 中断与等待队列等待每个字节写完, 不再在 EEPE 上自旋,
  * 自旋的时间被计为忙碌.
  *
- * 待办: 磨损均衡; lxfs 每次都把元数据写在同样的字节上.
+ * 待办: 目录的磨损均衡; lxfs 每次都把文件的大小与首块写在同样的字节上,
+ * 轮换这些字节需要占用数据块.
  */
 static void eeprom_dev_write(uint16_t off, const void *buf, uint16_t len)
 {
@@ -50,13 +52,13 @@ static int eeprom_fs_init(void)
 	case LXFS_CLEAN:
 		break;
 	case LXFS_FORMATTED:
-		printk("mkfs lxfs");
+		pr_notice("mkfs lxfs");
 		break;
 	case LXFS_REPAIRED:
-		printk("lxfs repaired");
+		pr_warn("lxfs repaired");
 		break;
 	default:
-		printk("lxfs: unknown");
+		pr_err("lxfs: unknown");
 		break;
 	}
 	return 0;

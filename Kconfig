@@ -10,3 +10,5 @@ mainmenu "Leonix/$(ARCH) Kernel Configuration"
 source "arch/Kconfig"
 
 source "drivers/Kconfig"
+
+source "lib/Kconfig.debug"

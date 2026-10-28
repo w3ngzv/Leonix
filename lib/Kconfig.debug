@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-2.0-only
+menu "Kernel hacking"
+
+menu "printk and dmesg options"
+
+config CONSOLE_LOGLEVEL_DEFAULT
+	int "Default console loglevel (1-15)"
+	range 1 15
+	default "7"
+	help
+	  Messages of a level below this number are sent to the console;
+	  dmesg shows every level.  The default 7 leaves out KERN_DEBUG
+	  only, as in Linux.
+
+config MESSAGE_LOGLEVEL_DEFAULT
+	int "Default message log level (1-7)"
+	range 1 7
+	default "4"
+	help
+	  The level of a printk() that names none.  4 is KERN_WARNING, as
+	  in Linux.
+
+endmenu # "printk and dmesg options"
+
+endmenu # Kernel hacking

@@ -35,16 +35,38 @@ static uint16_t log_seq;	/* records written since boot */
  */
 static void (*console_kick)(void);
 
+/*
+ * The level that @fmt starts with, KERN_SOH and a digit, which are
+ * stepped over; MESSAGE_LOGLEVEL_DEFAULT if it starts with none.
+ *
+ * @fmt 开头的级别, 即 KERN_SOH 与一个数字, 读取后跳过; 开头没有级别时返回
+ * MESSAGE_LOGLEVEL_DEFAULT.
+ */
+static uint8_t printk_get_level(const char **fmt)
+{
+	uint8_t c;
+
+	if (pgm_read_byte(*fmt) != KERN_SOH_ASCII)
+		return MESSAGE_LOGLEVEL_DEFAULT;
+	c = pgm_read_byte(*fmt + 1);
+	if (c < '0' + LOGLEVEL_EMERG || c > '0' + LOGLEVEL_DEBUG)
+		return MESSAGE_LOGLEVEL_DEFAULT;
+	*fmt += 2;
+	return c - '0';
+}
+
 /**
  * printk_P() - add a message to the kernel log
- * @fmt: format, a string in flash, as for vsnprintk_P()
+ * @fmt: format, a string in flash, as for vsnprintk_P(), after a
+ *	 KERN_<LEVEL> if any
  * @...: arguments for @fmt
  *
- * Called through printk(), which puts the literal in flash.  The message
- * is cut to LOG_TEXT - 1 characters.
+ * Called through printk() or a pr_<level>() macro, which put the literal
+ * in flash.  The message is cut to LOG_TEXT - 1 characters.
  *
- * 向内核日志添加一条消息. 经由 printk() 调用, printk() 把字面量放在 flash
- * 中. 消息截断为 LOG_TEXT - 1 个字符.
+ * 向内核日志添加一条消息. @fmt 可以以 KERN_<LEVEL> 开头. 经由 printk() 或
+ * pr_<level>() 宏调用, 二者把字面量放在 flash 中. 消息截断为 LOG_TEXT - 1 个
+ * 字符.
  *
  * Context: any, interrupt handlers included.  任意上下文, 包括中断处理程序.
  */
@@ -60,6 +82,7 @@ void printk_P(const char *fmt, ...)
 	 *
 	 * 待办: 为被截断的消息加上标记; 目前截断之后没有任何提示.
 	 */
+	rec.level = printk_get_level(&fmt);
 	va_start(ap, fmt);
 	vsnprintk_P(rec.text, sizeof(rec.text), fmt, ap);
 	va_end(ap);
@@ -134,4 +157,22 @@ int log_read(uint16_t seq, struct log_record *rec)
 	}
 	local_irq_restore(flags);
 	return ret;
+}
+
+/**
+ * suppress_message_printing() - whether the console leaves out a level
+ * @level: a record's level
+ *
+ * Linux keeps the threshold in a variable that the syslog() call
+ * changes; Leonix has no such call, so it is CONSOLE_LOGLEVEL_DEFAULT.
+ *
+ * 控制台是否略去级别为 @level 的记录. Linux 把阈值存放在 syslog() 调用可以修改
+ * 的变量中; Leonix 没有该调用, 因此阈值是 CONSOLE_LOGLEVEL_DEFAULT.
+ *
+ * Return: nonzero if a record of @level is not to be printed.
+ * 级别为 @level 的记录不应打印时返回非零值.
+ */
+int suppress_message_printing(uint8_t level)
+{
+	return level >= CONSOLE_LOGLEVEL_DEFAULT;
 }

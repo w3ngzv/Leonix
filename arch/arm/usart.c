@@ -9,7 +9,9 @@
  * room.  Log records go into the transmit ring whole, as the AVR's USB
  * console sends them a line at a time: printk() tells usart_console_kick(),
  * and the interrupt adds more once the ring has room for a line again.
- * A record that the log overwrites before it fits is counted as lost.
+ * A record that the log overwrites before it fits is counted as lost,
+ * and one of a level that suppress_message_printing() leaves out is
+ * skipped.
  *
  * The interrupt has the priority of SysTick and PendSV, see switch.S,
  * and pends PendSV when it has woken a task, so that the reader runs
@@ -23,7 +25,8 @@
  * 两个方向都经过由中断清空与填充的环形缓冲区; 读者睡眠到有字节到达, 写者睡眠
  * 到有空间. 日志记录整条放入发送缓冲区, 与 AVR 的 USB 控制台逐行发送相同:
  * printk() 通知 usart_console_kick(), 缓冲区重新放得下一行时由中断继续加入.
- * 放入之前就被日志覆盖的记录计为丢失.
+ * 放入之前就被日志覆盖的记录计为丢失, suppress_message_printing() 略去的
+ * 级别的记录被跳过.
  *
  * 该中断与 SysTick、PendSV 同一优先级 (见 switch.S), 唤醒了任务时挂起 PendSV,
  * 使读者在下一个节拍之前运行.
@@ -131,6 +134,9 @@ static void console_fill(void)
 			len = snprintk(line, sizeof(line), "(%u lost)\r\n",
 				       console_lost);
 			console_lost = 0;
+		} else if (suppress_message_printing(rec.level)) {
+			console_sent++;
+			continue;
 		} else {
 			len = snprintk(line, sizeof(line), "[%5u] %s\r\n",
 				       rec.secs, rec.text);

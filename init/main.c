@@ -79,9 +79,9 @@ static void __attribute__((noinline)) report_stack_usage(void)
 			continue;
 		lowest[i] = free;
 		if (i < MAX_TASKS)
-			printk("stack t%u %u", i, free);
+			pr_info("stack t%u %u", i, free);
 		else
-			printk("stack idle %u", free);
+			pr_info("stack idle %u", free);
 	}
 }
 
@@ -136,7 +136,7 @@ static void lcd_task(void)
 
 	online = lcd_show_banner() == 0;
 	if (online)
-		printk("pcf8574 at %x", lcd_address());
+		pr_info("pcf8574 at %x", lcd_address());
 	last_jiffies = next_retry = next_blink = get_jiffies();
 	last_idle = sched_idle_ticks();
 	next_update = last_jiffies + HZ;
@@ -160,14 +160,14 @@ static void lcd_task(void)
 			report_stack_usage();
 			err = lcd_check();
 			if (err == 0) {
-				printk("lcd replugged");
+				pr_info("lcd replugged");
 				err = lcd_show_banner();
 			}
 			if (err >= 0)
 				err = lcd_show_status(idle_now - last_idle,
 						      now - last_jiffies);
 			if (err < 0) {
-				printk("lcd offline");
+				pr_warn("lcd offline");
 				online = 0;
 				next_retry = next_blink = get_jiffies();
 				continue;
@@ -186,7 +186,7 @@ static void lcd_task(void)
 		if (time_after_eq(now, next_retry)) {
 			report_stack_usage();
 			if (lcd_show_banner() == 0) {
-				printk("lcd online");
+				pr_info("lcd online");
 				online = 1;
 				led_error_off();
 				last_jiffies = get_jiffies();
@@ -252,21 +252,21 @@ void do_initcalls(void)
 		fn = (initcall_t)pgm_read_ptr(call);
 		ret = fn();
 		if (ret < 0)
-			printk("init %x %d", (uint16_t)(uintptr_t)fn, ret);
+			pr_err("init %x %d", (uint16_t)(uintptr_t)fn, ret);
 	}
 }
 
 int main(void)
 {
 	time_init();
-	printk("Leonix booted");
+	pr_info("Leonix booted");
 	leds_init();
 	do_initcalls();
 	task_create(IS_ENABLED(CONFIG_HD44780) ? lcd_task : stack_task,
 		    status_stack, sizeof(status_stack));
 	if (IS_ENABLED(CONFIG_USB_CDC_ACM) && usb_init() < 0)
-		printk("usb init fail");
+		pr_err("usb init fail");
 	else if (init_start(init_stack, sizeof(init_stack)) < 0)
-		printk("no init");
+		pr_err("no init");
 	sched_start();
 }
