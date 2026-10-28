@@ -53,6 +53,13 @@ static void tty_get_line(void)
 			echo("\r\n", 2);
 			break;
 		}
+		/*
+		 * TODO: there are no signals, so Ctrl-C only drops the line
+		 * and cannot stop a running program
+		 *
+		 * 待办: 没有信号机制, Ctrl-C 只丢弃当前行, 无法终止正在运行的
+		 * 程序
+		 */
 		if (c == KEY_CTRL_C) {
 			echo("^C\r\n", 4);
 			len = 0;
@@ -65,7 +72,12 @@ static void tty_get_line(void)
 			}
 			continue;
 		}
-		/* keep room for the '\n'; 为 '\n' 留出位置 */
+		/*
+		 * Keep room for the '\n'.  TODO: input past the end of the
+		 * line is dropped without any sign.
+		 *
+		 * 为 '\n' 留出位置. 待办: 超出行尾的输入被丢弃, 没有任何提示.
+		 */
 		if (c < ' ' || len == TTY_LINE - 1)
 			continue;
 		tty_line[len++] = c;

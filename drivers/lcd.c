@@ -127,6 +127,14 @@ static int lcd_clear(void)
 	return 0;
 }
 
+/*
+ * TODO: register the display as a character device, /dev/lcd, so that
+ * it can be a second terminal; today only main.c writes to it.
+ *
+ * 待办: 把显示屏登记为字符设备 /dev/lcd, 使其可以作为第二个终端; 目前只有
+ * main.c 向其写入.
+ */
+
 /**
  * lcd_init() - find the expander and initialise the display
  *

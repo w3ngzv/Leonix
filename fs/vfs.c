@@ -42,6 +42,13 @@ static const struct mount mounts[] = {
 
 #define NR_MOUNTS	ARRAY_SIZE(mounts)
 
+/*
+ * TODO: one table for the whole system, used by init's task only; a
+ * table per process comes with processes, see kernel/exec.c.
+ *
+ * 待办: 全系统只有这一张表, 只有 init 任务使用; 每个进程各一张表需要与进程
+ * 一起实现, 见 kernel/exec.c.
+ */
 static struct file files[MAX_FDS];
 
 /*

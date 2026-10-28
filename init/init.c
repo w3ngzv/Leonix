@@ -57,6 +57,12 @@ int init_start(uint8_t *stack, uint16_t size)
 	char path[sizeof("/dev/" CONFIG_INIT_CONSOLE)];
 
 	strcpy_P(path, PSTR("/dev/" CONFIG_INIT_CONSOLE));
+	/*
+	 * TODO: no standard error; programs write their errors to standard
+	 * output.
+	 *
+	 * 待办: 没有标准错误输出, 程序的错误信息写在标准输出.
+	 */
 	if (open(path, O_RDWR) != STDIN_FILENO ||
 	    dup2(STDIN_FILENO, STDOUT_FILENO) != STDOUT_FILENO)
 		return -1;
