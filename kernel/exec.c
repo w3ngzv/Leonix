@@ -17,12 +17,12 @@
  * 符表之外的 struct file 保持打开, 以 peek() 取指. 所有程序共用描述符, 与
  * Linux 中 fork() 之后的情形相同.
  */
-#include <string.h>
 
 #include <leonix/errno.h>
 #include <leonix/exec.h>
 #include <leonix/lxfs.h>
 #include <leonix/printk.h>
+#include <leonix/string.h>
 #include <leonix/syscall.h>
 #include <leonix/unistd.h>
 #include <leonix/vm.h>

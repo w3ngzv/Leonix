@@ -21,7 +21,6 @@
  *   uptime   开机以来的秒数及其中空闲的秒数, 格式与 Linux 相同
  */
 #include <leonix/pgmspace.h>
-#include <string.h>
 
 #include <leonix/errno.h>
 #include <leonix/irqflags.h>
@@ -30,6 +29,7 @@
 #include <leonix/printk.h>
 #include <leonix/procfs.h>
 #include <leonix/sched.h>
+#include <leonix/string.h>
 
 #define PROC_LINE	24
 #define CENTI		(HZ / 100)	/* jiffies per hundredth of a second */

@@ -5,5 +5,4 @@
 # 库函数的 Makefile.
 #
 
-obj-y += vsprintf.o
-obj-$(CONFIG_ARM) += string.o
+obj-y += vsprintf.o string.o
