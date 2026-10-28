@@ -409,7 +409,7 @@ static int flash_fs_init(void)
 		printk("lxfs repaired");
 		break;
 	default:
-		printk("lxfs: unknown version, not mounted");
+		printk("lxfs: unknown");
 		break;
 	}
 	return 0;

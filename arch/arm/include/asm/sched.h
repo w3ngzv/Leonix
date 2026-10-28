@@ -44,6 +44,9 @@ _Static_assert(TASK_STACK_RESERVE <= IDLE_STACK_SIZE,
  *
  * 栈的大小依据 sched_stack_free() 在 QEMU 下的读数确定, 测量值见
  * Documentation/stm32f103.rst. 修改任务之后用 ps 重新核对.
+ *
+ * TODO: measure them again on a board.
+ * 待办: 在板上重新测量.
  */
 #define STATUS_STACK_SIZE	512
 #define INIT_STACK_SIZE		1024

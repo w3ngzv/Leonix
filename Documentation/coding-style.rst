@@ -75,6 +75,14 @@ kernel-doc 的 ``@参数:`` 行只写英文, 参数之后的中文段落说明�
 "datasheet table 5-3" 与 arch/avr/time.c 中 _Static_assert 旁的说明. 出处的
 文献放在 Documentation/references 中登记.
 
+尚未完成的工作在需要修改的代码处写成 ``TODO:`` 注释, 说明缺少什么, 理由较长时
+指向 Documentation/notes 中的对应文档. 中文段落以 ``待办:`` 开头. 完成该项的
+提交同时删除这条注释. Linux 的 coding-style.rst 对此没有规定, 这一写法取自其
+代码中的实际用法: 在 126ad898a6e9 的 .c、.h 与 .S 文件中, ``TODO:`` 出现 4074
+次, 多于 ``FIXME:`` 的 2636 次与 ``XXX:`` 的 1038 次. Linux 的 staging 驱动
+另在目录中放一个 TODO 文件 (Documentation/process/2.Process.rst), Leonix 不采用
+这种做法. ``git grep -n 'TODO:'`` 列出全部待办.
+
 注释中不写代码无法保持正确的数字, 例如某函数当前的周期数或栈用量. 这类
 测量值写在提交说明与 Documentation/notes 中, 并注明日期与提交号.
 
