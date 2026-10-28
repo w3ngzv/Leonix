@@ -55,4 +55,12 @@ config TTP229
 	  character per key touched, '1' to '9' and 'a' to 'g' for keys 1
 	  to 16.  The board must be set to 16-key mode, P1 pin 3 shorted.
 
+config TTP229_8_KEYS
+	bool "Keypad left in 8-key mode"
+	depends on TTP229
+	help
+	  For a board with P1 pin 3 open, the TTP229's default: only keys
+	  1 to 8 report, and only 8 bits are clocked out.  A board in
+	  16-key mode read this way loses keys 9 to 16.
+
 endmenu
