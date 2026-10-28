@@ -240,8 +240,8 @@ tests/test_printk: tests/test_printk.c kernel/printk.c lib/vsprintf.c \
 		tests/test_printk.c kernel/printk.c lib/vsprintf.c
 
 tests/test_lxfs: tests/test_lxfs.c fs/lxfs.c include/leonix/lxfs.h include/leonix/fs.h
-	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Itests/host -Iinclude -o $@ \
-		tests/test_lxfs.c fs/lxfs.c
+	$(HOSTCC) -std=c11 -Wall -Wextra -Werror -Itests/host -Iinclude \
+		-DCONFIG_LXFS_V1_UPGRADE=1 -o $@ tests/test_lxfs.c fs/lxfs.c
 
 # The STM32 Flash backend with lxfs on top, its registers from
 # tests/fake_stm32.  -O2 because it remounts once for every program and
@@ -272,7 +272,8 @@ AVR_CC ?= avr-gcc
 tests/test_lxfs.avr.elf: tests/test_lxfs.c tests/qemu_uart.c fs/lxfs.c \
 		include/leonix/lxfs.h include/leonix/fs.h
 	$(AVR_CC) -mmcu=atmega2560 -Os -std=gnu11 -Wall -Wextra -Werror -Iarch/avr/include \
-		-Iinclude -o $@ tests/test_lxfs.c tests/qemu_uart.c fs/lxfs.c
+		-Iinclude -DCONFIG_LXFS_V1_UPGRADE=1 -o $@ tests/test_lxfs.c \
+		tests/qemu_uart.c fs/lxfs.c
 
 check-qemu: tests/test_lxfs.avr.elf
 	sh tests/run-qemu.sh $(QEMU_AVR) $(QEMU_TIMEOUT) $<

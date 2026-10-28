@@ -14,6 +14,7 @@
  */
 #include <avr/eeprom.h>
 
+#include <leonix/errno.h>
 #include <leonix/module.h>
 #include <leonix/printk.h>
 #include <leonix/lxfs.h>
@@ -27,15 +28,8 @@ static void eeprom_dev_read(uint16_t off, void *buf, uint16_t len)
  * TODO: wait for each byte on the EE READY interrupt with a wait queue
  * rather than spinning on EEPE, which counts as busy time.
  *
- * TODO: wear levelling for the directory; lxfs writes the size and first
- * block of a file to the same bytes every time, which costs data blocks
- * to rotate.
- *
  * 待办: 以 EE READY 中断与等待队列等待每个字节写完, 不再在 EEPE 上自旋,
  * 自旋的时间被计为忙碌.
- *
- * 待办: 目录的磨损均衡; lxfs 每次都把文件的大小与首块写在同样的字节上,
- * 轮换这些字节需要占用数据块.
  */
 static void eeprom_dev_write(uint16_t off, const void *buf, uint16_t len)
 {
@@ -56,6 +50,12 @@ static int eeprom_fs_init(void)
 		break;
 	case LXFS_REPAIRED:
 		pr_warn("lxfs repaired");
+		break;
+	case LXFS_UPGRADED:
+		pr_notice("lxfs upgraded");
+		break;
+	case -ENOSPC:
+		pr_err("lxfs v1 full");
 		break;
 	default:
 		pr_err("lxfs: unknown");
