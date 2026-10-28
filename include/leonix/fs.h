@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 
-#define MAX_CHRDEVS	4
+#define MAX_CHRDEVS	5
 
 /*
  * open() flags, with the values of Linux's asm-generic/fcntl.h, except
