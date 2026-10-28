@@ -2,7 +2,8 @@ Leonix
 ======
 
 Leonix 是运行在 Arduino Leonardo (ATmega32U4) 上的内核, 用 C 与 AVR 汇编
-编写, 由 avr-gcc 编译, 不使用 Arduino core 及其任何库.
+编写, 由 avr-gcc 编译, 不使用 Arduino core 及其任何库. 同一内核也经由
+arch/arm 运行在 STM32F103C8 (Cortex-M3) 上, 见下文 "STM32F103" 一节.
 
 板子设计为独立运行, 由圆口电源插座或 VIN 供电. 连接电脑时, USB 口是一个
 CDC-ACM 串口, 传送内核日志, 烧录也不必按复位键.
@@ -41,6 +42,21 @@ Leonix 运行时, make flash 自行使板子复位进入 bootloader. 板上是�
 需要先按下复位键.
 
 
+STM32F103
+---------
+
+	make stm32f103_defconfig
+	make
+	make flash
+
+为 Blue Pill 等 STM32F103C8 核心板构建 leonix.elf, 并经 ST-LINK 由 OpenOCD
+写入. 控制台为 USART1, 115200 波特, TX 为 PA9, RX 为 PA10, 在 /dev 中为
+ttyS0; lxfs 保存在 Flash 的最后 8 KiB. 构建需要 arm-none-eabi-gcc, 不需要
+C 库. "make qemu" 在 QEMU 的 stm32vldiscovery 上运行同一映像, "make
+check-boot" 驱动其 shell. 截至 2026-10-27, 该移植只在 QEMU 中运行过, 尚未在
+板上运行. 详见 Documentation/stm32f103.rst.
+
+
 硬件
 ----
 
@@ -71,6 +87,10 @@ make flash 以 1200 波特率打开并关闭串口, 使板子进入 Caterina boo
 Documentation/building.rst
 	工具链的安装, 映像的构建, 以及经由 Caterina bootloader 烧录的步骤.
 	"make htmldocs" 用 Sphinx 把 Documentation/ 渲染成 HTML.
+
+Documentation/stm32f103.rst
+	STM32F103C8 的存储器、时钟与指令集, Leonix 在其上的构建、烧录与运行,
+	以及 tests/stm32 中供该板使用的测试程序.
 
 Documentation/booting.rst
 	Caterina bootloader 跳转到应用时留下的机器状态, 以及启动代码需要

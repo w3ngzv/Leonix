@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+if ARM
+
+config USART_CONSOLE
+	def_bool y
+	help
+	  USART1 of the STM32F103 at 115200 baud, on PA9 (TX) and PA10
+	  (RX), in arch/arm/usart.c.  It carries ttyS0 and the kernel log.
+
+endif

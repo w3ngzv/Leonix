@@ -6,13 +6,13 @@ STM32F103C8T6 核心板
 
 **STM32F103C8T6** 是 STMicroelectronics 生产的 32 位微控制器, 属于
 STM32F1 系列的增强型产品线 (performance line), 内核为 Arm Cortex-M3.
-Leonix 运行在 Arduino Leonardo 上, 该芯片是 drivers/swd.c 的调试对象,
-也是 tests/stm32 中测试程序的运行平台.
+Leonix 运行在 Arduino Leonardo 与该芯片上, 后者的代码位于 arch/arm. 该芯片
+同时是 drivers/swd.c 的调试对象, 以及 tests/stm32 中测试程序的运行平台.
 
 本文面向第一次接触 STM32 的读者, 依次说明该芯片的型号、存储器、启动、
-时钟、外设寄存器与指令集, 然后说明在没有板子的情况下如何编写并检查
-tests/stm32 的代码. 每项事实都注明出处, 所引文档的修订版与下载地址见
-references/index.rst:
+时钟、外设寄存器与指令集, 再说明 Leonix 在该芯片上的构建、烧录与运行, 然后
+说明在没有板子的情况下如何编写并检查 tests/stm32 的代码. 每项事实都注明出处,
+所引文档的修订版与下载地址见 references/index.rst:
 
   - DS5319 Rev 20, STM32F103x8/xB 数据手册: 该型号的引脚与电气参数
   - RM0008 Rev 15, STM32F10xxx 参考手册: 整个系列的存储器与外设寄存器
@@ -428,6 +428,71 @@ DBGMCU_IDCODE, 其低 12 位为 0x410 表示中容量器件 (RM0008 31.6.1). 本
 2026-10-26 用 stlink 工具集 1.9.0 的 ``st-info --probe`` 连接 Flash 为空、
 内核处于锁定状态的板子时, 芯片 ID 读出 0, 随后 ST-LINK 不再响应, 拔插之后
 才恢复. 本项目因此只用 OpenOCD.
+
+
+运行 Leonix
+===========
+
+arch/arm 与 Leonardo 的 arch/avr 共用 kernel/、fs/、drivers/ 中与芯片无关的
+部分, 以及 /bin 中的程序. 架构是 .config 中的一个选项 (arch/Kconfig), 构建::
+
+  make stm32f103_defconfig
+  make
+
+生成 leonix.elf 与 leonix.bin. 工具链为 arm-none-eabi-gcc, 安装命令见下文
+"安装工具". 内核不链接 C 库, 用到的字符串函数由 lib/string.c 提供, 因此
+Homebrew 提供的不带 newlib 的工具链同样可以构建. 与 Leonardo 共用一个工作区
+时, 切换架构只需运行另一个 defconfig; 每个目标文件都依赖
+include/generated/autoconf.h, 随之全部重新编译.
+
+板上用到的引脚与设置:
+
+- 控制台为 USART1, PA9 为 TX, PA10 为 RX (DS5319 表 5), 115200 波特, 8 位
+  数据, 无校验, 1 位停止位, 在 /dev 中为 ttyS0, 内核日志与 /bin/sh 都在其上.
+  需要一个 3.3 V 电平的 USB 串口转换器, TX 与 RX 交叉连接并共地.
+- 核心板上 PC13 所接的 LED, 低电平点亮, 由 arch/arm/leds.c 驱动; panic()
+  之后常亮.
+- 时钟按上文 "时钟" 一节设为 72 MHz. HSE 或 PLL 在限定的轮询次数内未就绪时,
+  CPU 留在 8 MHz 的 HSI 上, SysTick 与 USART 的分频按实际频率计算
+  (arch/arm/setup.c).
+
+Flash 的前 56 KiB 存放内核, 最后 8 KiB, 即 0x0800E000 至 0x08010000, 存放
+lxfs. 该芯片没有 EEPROM, lxfs 在 Flash 上以四个 2 KiB 的槽轮流保存, 每槽为
+一页映像与一页写入日志, 做法与理由见 drivers/stm32_flash.c 开头的注释. SRAM
+自 0x20000000 起依次为 .data、.bss、两个任务栈与 1 KiB 的启动栈, 启动栈之后
+成为所有异常处理程序共用的主栈. arch/arm/leonix.lds 以 ASSERT 把这些内容限制
+在 8 KiB 之内, 使同一映像能在下述 QEMU 机型上运行.
+
+烧录经 ST-LINK 与 OpenOCD, 接线见上一节::
+
+  make flash
+
+该目标运行 OpenOCD 的 ``program``, 其中的 ``flash write_image erase`` 只擦除
+映像各段所在的扇区以及段之间的空隙 (OpenOCD 0.12.0 手册 "flash write_image"
+一条). leonix.elf 的可加载段都在 lxfs 区域之前, 因此重新烧录内核不会擦除
+文件. 该结论只依据手册, 没有在板上验证.
+
+没有板子时, 同一个 leonix.elf 可以在 QEMU 的 stm32vldiscovery 机型上运行::
+
+  make qemu         # 交互运行, 按 Ctrl-A 再按 X 退出
+  make check-boot   # tests/qemu_boot.py: 启动并逐条核对 shell 命令的输出
+
+该机型与板子的差别见下一节. 对 Leonix 有影响的有三处. RCC 未实现, 时钟初始化
+总是留在 HSI 路径上. Flash 的擦除与编程被忽略, 驱动发现读回的值不符, 记录
+``lxfs in RAM``, 此后 lxfs 只存在于 RAM 中. SysTick 的计数频率与内核的设定
+不符: 2026-10-27 用 QEMU 11.1.2 测量, 按 8 MHz 设定 10 ms 周期时 5.01 s 内
+发生 1497 次中断, 相当于以约 24 MHz 计数; 按 1 ms 周期运行时 5.01 s 内只有
+3335 次. 因此 QEMU 中 uptime 与睡眠的时长都不准确.
+
+栈的大小由 arch/arm/include/asm/sched.h 给出. 2026-10-27 在 QEMU 中运行
+tests/qemu_boot.py 之后, ps 报告的空闲字节为: 任务 0 (栈用量报告) 512 字节中
+222, 任务 1 (/bin/sh) 1024 字节中 582, 空闲任务 96 字节中 26. 主栈的用量没有
+测量.
+
+截至 2026-10-27, arch/arm 只在 QEMU 中运行过, 尚未在板上运行. 时钟切换、
+GPIO 设置、Flash 的编程与擦除都只能在板上检查; drivers/stm32_flash.c 的日志与
+换槽逻辑由主机测试 tests/test_stm32_flash.c 检查, 该测试按 PM0075 2.3.3 的规则
+模拟 Flash, 并在每一次编程与擦除处模拟复位.
 
 
 没有板子时

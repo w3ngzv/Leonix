@@ -6,6 +6,12 @@
 
 #include <leonix/fs.h>
 
+/*
+ * bytes of the device lxfs lives on, the AVR's whole EEPROM
+ * lxfs 所在设备的字节数, 即 AVR 的全部 EEPROM
+ */
+#define LXFS_SIZE		1024
+
 /* Move @len bytes between @buf and the device at byte @off. */
 typedef void (*lxfs_read_fn)(uint16_t off, void *buf, uint16_t len);
 typedef void (*lxfs_write_fn)(uint16_t off, const void *buf, uint16_t len);

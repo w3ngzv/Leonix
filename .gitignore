@@ -2,6 +2,7 @@
 *.d
 *.elf
 *.hex
+/leonix.bin
 *.map
 *.lst
 *.log
@@ -14,6 +15,7 @@ Documentation/output/
 tests/test_vsprintf
 tests/test_lxfs
 tests/test_vm
+tests/test_stm32_flash
 *.lx
 fs/romfs_image.c
 *.lex.c

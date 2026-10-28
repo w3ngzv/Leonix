@@ -121,9 +121,14 @@ tests/test_lxfs.c 中一处只在 16 位 int 下出现的有符号比较.
 ================
 
 中断处理程序与任务共同读写的变量声明为 ``volatile``. 多于一个字节的变量,
-在任务中的读写放在 ``ATOMIC_BLOCK(ATOMIC_RESTORESTATE)`` 中, 因为 AVR
-一条指令只读写一个字节, 中断可能发生在两个字节之间. arch/avr/time.c 的
-``get_jiffies()`` 是示例. 该节由人检查.
+在任务中的读写放在 ``local_irq_save()`` 与 ``local_irq_restore()`` 之间
+(include/leonix/irqflags.h), 因为 AVR 一条指令只读写一个字节, 中断可能发生
+在两个字节之间. kernel/printk.c 的 ``log_newest()`` 是示例.
+
+kernel/、fs/、lib/、init/ 与 include/ 中的代码不包含 avr-libc 的头文件:
+开关中断经由 include/leonix/irqflags.h, flash 中的常量经由
+include/leonix/pgmspace.h. arch/avr 中的代码可以直接使用 avr-libc, 例如
+arch/avr/time.c 的 ``get_jiffies()`` 使用 ``ATOMIC_BLOCK``. 该节由人检查.
 
 
 断电与 EEPROM

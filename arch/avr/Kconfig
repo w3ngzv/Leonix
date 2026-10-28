@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0-only
-config AVR
+if AVR
+
+config USB_CDC_ACM
 	def_bool y
 	help
-	  Leonix runs on the ATmega32U4 of the Arduino Leonardo, behind the
-	  Caterina bootloader.
+	  The ATmega32U4's USB controller as a CDC-ACM serial port, in
+	  arch/avr/usb.c.  It carries ttyACM0 and the kernel log.
+
+endif
