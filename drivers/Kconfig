@@ -26,7 +26,9 @@ config HD44780
 	help
 	  A 16x2 HD44780 display behind a PCF8574 I2C expander.  A task
 	  shows the idle share and the uptime on it once a second, and
-	  panic() writes its reason there.
+	  panic() writes its reason there.  Programs write to it through
+	  /dev/lcd; after the first write the task leaves the display
+	  alone until reset.
 
 	  Without it the same task only reports stack usage to the kernel
 	  log.

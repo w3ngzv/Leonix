@@ -27,6 +27,8 @@
 static uint8_t status_stack[STATUS_STACK_SIZE] __task_stack;
 static uint8_t init_stack[INIT_STACK_SIZE] __task_stack;
 
+static void stack_task(void);
+
 /*
  * Format a line, or part of one, and write it at (@col, @row).  The
  * lcd_show_*() functions are noinline: inlined, their line buffers would
@@ -103,6 +105,22 @@ static int __attribute__((noinline)) lcd_show_status(uint32_t idle_ticks, uint32
 }
 
 /*
+ * Take the display for one refresh.  Once /dev/lcd has been written the
+ * display is the device's, and task 0 keeps only the stack reports.
+ *
+ * 为一次刷新获取显示屏. /dev/lcd 被写入之后显示屏归该设备使用, 任务 0
+ * 此后只做栈用量报告.
+ */
+static void lcd_take(void)
+{
+	if (lcd_lock() == 0)
+		return;
+	led_error_off();
+	pr_info("lcd given to /dev/lcd");
+	stack_task();
+}
+
+/*
  * A failed transfer means the backpack is gone or the bus glitched.  The
  * task then retries a full lcd_init() every LCD_RETRY_INTERVAL, since a
  * backpack that lost power comes back with an uninitialised HD44780, and
@@ -134,7 +152,9 @@ static void lcd_task(void)
 
 	led_error_off();
 
+	lcd_take();
 	online = lcd_show_banner() == 0;
+	lcd_unlock();
 	if (online)
 		pr_info("pcf8574 at %x", lcd_address());
 	last_jiffies = next_retry = next_blink = get_jiffies();
@@ -158,6 +178,7 @@ static void lcd_task(void)
 			idle_now = sched_idle_ticks();
 			local_irq_restore(flags);
 			report_stack_usage();
+			lcd_take();
 			err = lcd_check();
 			if (err == 0) {
 				pr_info("lcd replugged");
@@ -166,6 +187,7 @@ static void lcd_task(void)
 			if (err >= 0)
 				err = lcd_show_status(idle_now - last_idle,
 						      now - last_jiffies);
+			lcd_unlock();
 			if (err < 0) {
 				pr_warn("lcd offline");
 				online = 0;
@@ -185,7 +207,10 @@ static void lcd_task(void)
 		}
 		if (time_after_eq(now, next_retry)) {
 			report_stack_usage();
-			if (lcd_show_banner() == 0) {
+			lcd_take();
+			err = lcd_show_banner();
+			lcd_unlock();
+			if (err == 0) {
 				pr_info("lcd online");
 				online = 1;
 				led_error_off();
