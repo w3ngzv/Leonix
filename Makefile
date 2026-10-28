@@ -44,7 +44,7 @@ config-targets := config menuconfig nconfig oldconfig olddefconfig \
 	defconfig %_defconfig savedefconfig allyesconfig allnoconfig \
 	alldefconfig listnewconfig syncconfig
 no-dot-config-targets := $(config-targets) clean mrproper check \
-	check-qemu check-stm32 stm32-tests htmldocs cleandocs
+	check-qemu check-stm32 stm32-tests htmldocs cleandocs help
 
 need-config := 1
 ifneq ($(MAKECMDGOALS),)
@@ -326,7 +326,50 @@ htmldocs:
 cleandocs:
 	rm -rf $(DOCS_OUTPUT)
 
+# The layout of Linux's "make help"; the architecture adds archhelp in
+# arch/$(SRCARCH)/config.mk, and its defconfigs are listed as boards.
+#
+# 布局与 Linux 的 "make help" 相同; 架构在 arch/$(SRCARCH)/config.mk 中以
+# archhelp 补充自己的目标, 其 defconfig 作为 boards 列出.
+boards := $(sort $(notdir $(wildcard arch/$(SRCARCH)/configs/*_defconfig)))
+
+help:
+	@echo  'Cleaning targets:'
+	@echo  '  clean		  - Remove most generated files but keep the config'
+	@echo  '  mrproper	  - Remove all generated files + config'
+	@echo  ''
+	@$(scripts_kconfig) --no-print-directory help
+	@echo  ''
+	@echo  'Other generic targets:'
+	@echo  '  all		  - Build all targets marked with [*]'
+	@echo  '  coreutils	  - Build the programs of $(COREUTILS) for /bin'
+	@echo  '  size		  - Print the section sizes of $(TARGET).elf'
+	@echo  '  disasm	  - Disassemble $(TARGET).elf'
+	@echo  ''
+	@echo  'Test targets:'
+	@echo  '  check		  - Run the host tests'
+	@echo  '  check-qemu	  - Run the lxfs test on qemu-system-avr'
+	@echo  '  check-stm32	  - Run the STM32 instruction checks on qemu-system-arm'
+	@echo  '  stm32-tests	  - Build the test programs for an STM32F103 board'
+	@echo  ''
+	@echo  'Documentation targets:'
+	@echo  '  htmldocs	  - HTML in $(DOCS_OUTPUT)/html'
+	@echo  '  cleandocs	  - Remove $(DOCS_OUTPUT)'
+	@echo  ''
+	@echo  'Architecture-specific targets ($(SRCARCH)):'
+	@$(or $(archhelp),\
+		echo '  No architecture-specific help defined for $(SRCARCH)')
+	@echo  ''
+	@$(if $(boards), \
+		$(foreach b, $(boards), \
+		printf "  %-27s - Build for %s\\n" $(b) $(subst _defconfig,,$(b));) \
+		echo '')
+	@echo  '  make ARCH=arch [targets] Build for arch/arch (default: avr)'
+	@echo  ''
+	@echo  'Execute "make" or "make all" to build all targets marked with [*] '
+	@echo  'For further info see the ./README file'
+
 -include $(OBJS:.o=.d)
 
 .PHONY: all disasm size clean mrproper coreutils check check-qemu htmldocs FORCE \
-	cleandocs check-stm32 stm32-tests $(config-targets)
+	cleandocs check-stm32 stm32-tests help $(config-targets)

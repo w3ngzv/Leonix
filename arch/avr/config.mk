@@ -112,4 +112,10 @@ fuses:
 	$(enter_bootloader)
 	$(AVRDUDE) -U lfuse:r:-:h -U hfuse:r:-:h -U efuse:r:-:h -U lock:r:-:h
 
+define archhelp
+  echo  '* leonix.hex    - Image for the application section of the flash'
+  echo  '  flash         - Write leonix.hex, or HEX=, through Caterina on PORT='
+  echo  '  fuses         - Read the fuses and lock bits through Caterina'
+endef
+
 .PHONY: flash fuses
