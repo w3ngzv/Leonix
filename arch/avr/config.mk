@@ -46,6 +46,7 @@ LDFLAGS  := -mmcu=$(MCU) -nostartfiles -T $(LDSCRIPT) \
 	    -Wl,-Map=$(TARGET).map
 
 KBUILD_IMAGE := $(TARGET).hex
+KBUILD_DEFCONFIG := leonardo_defconfig
 
 $(TARGET).elf: $(OBJS) $(LDSCRIPT)
 	$(CC) $(LDFLAGS) -o $@ $(OBJS)

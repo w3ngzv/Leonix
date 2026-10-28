@@ -30,6 +30,7 @@ LDFLAGS  := $(ARM_ARCH_FLAGS) -nostdlib -T $(LDSCRIPT) \
 	    -Wl,--gc-sections -Wl,-Map=$(TARGET).map
 
 KBUILD_IMAGE := $(TARGET).bin
+KBUILD_DEFCONFIG := stm32f103_defconfig
 
 $(TARGET).elf: $(OBJS) $(LDSCRIPT)
 	$(CC) $(LDFLAGS) -o $@ $(OBJS) -lgcc

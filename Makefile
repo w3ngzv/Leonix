@@ -17,7 +17,26 @@ TARGET   := leonix
 # include/generated/autoconf.h.
 export srctree := .
 export KCONFIG_CONFIG ?= .config
-KBUILD_DEFCONFIG := leonardo_defconfig
+
+# The architecture, given as ARCH= on the command line or in the
+# environment, as in Linux.  Linux defaults to the host's architecture;
+# Leonix runs on no host, so the default is avr, the Leonardo.
+# arch/$(SRCARCH)/config.mk names the toolchain, the flags, the image and
+# KBUILD_DEFCONFIG, which Linux keeps in arch/$(SRCARCH)/Makefile.
+# Kconfig reads SRCARCH from the environment, see arch/Kconfig.
+#
+# 架构与 Linux 相同, 由命令行或环境变量中的 ARCH= 给出. Linux 默认取主机的架构;
+# Leonix 不在任何主机上运行, 因此默认为 avr, 即 Leonardo.
+# arch/$(SRCARCH)/config.mk 给出工具链、编译选项、映像与 KBUILD_DEFCONFIG, 后者
+# 在 Linux 中位于 arch/$(SRCARCH)/Makefile. Kconfig 从环境变量读取 SRCARCH, 见
+# arch/Kconfig.
+ARCH ?= avr
+SRCARCH := $(ARCH)
+export ARCH SRCARCH
+
+ifeq ($(wildcard arch/$(SRCARCH)/config.mk),)
+$(error ARCH=$(ARCH): no arch/$(SRCARCH)/config.mk)
+endif
 KCONF := scripts/kconfig/conf
 scripts_kconfig := $(MAKE) -f scripts/kconfig/Makefile
 
@@ -35,21 +54,23 @@ endif
 endif
 
 ifdef need-config
+# Linux lets syncconfig carry a .config made for one architecture over
+# to another without a word, dropping the options the other lacks.
+# Leonix stops instead, since a forgotten ARCH=arm would otherwise turn
+# the STM32 configuration into a Leonardo one.
+#
+# Linux 允许 syncconfig 把为一个架构生成的 .config 不加提示地转到另一个架构,
+# 并丢弃后者没有的选项. Leonix 在此停止, 否则漏写 ARCH=arm 就会把 STM32 的配置
+# 改成 Leonardo 的配置.
+arch-symbol := CONFIG_$(shell echo '$(SRCARCH)' | tr a-z A-Z)=y
+ifneq ($(wildcard $(KCONFIG_CONFIG)),)
+ifeq ($(shell grep -x '$(arch-symbol)' $(KCONFIG_CONFIG)),)
+$(error $(KCONFIG_CONFIG) was not made for ARCH=$(ARCH))
+endif
+endif
 include include/config/auto.conf
 -include include/config/auto.conf.cmd
 endif
-
-# The architecture comes from .config, see arch/Kconfig.  Until
-# auto.conf exists, and for targets that need no .config, it is avr;
-# make reads this file again once auto.conf has been made.
-# arch/$(ARCH)/config.mk names the toolchain, the flags and the image,
-# as in U-Boot.
-#
-# 架构取自 .config, 见 arch/Kconfig. auto.conf 尚未生成时, 以及不需要
-# .config 的目标, 架构为 avr; auto.conf 生成之后 make 会重新读取本文件.
-# arch/$(ARCH)/config.mk 给出工具链、编译选项与映像, 与 U-Boot 相同.
-ARCH := $(or $(patsubst "%",%,$(CONFIG_SYS_ARCH)),avr)
-SRCARCH := $(ARCH)
 
 # Each directory lists its objects in its own Makefile as Linux's obj-y,
 # read here in place of Kbuild's descent into the directory.
@@ -116,16 +137,20 @@ syncconfig:
 	$(scripts_kconfig) conf
 	$(KCONF) --$@ Kconfig
 
-defconfig: $(KBUILD_DEFCONFIG)
+# KBUILD_DEFCONFIG comes from arch/$(SRCARCH)/config.mk, read later
+# KBUILD_DEFCONFIG 取自稍后读取的 arch/$(SRCARCH)/config.mk
+defconfig:
+	$(MAKE) $(KBUILD_DEFCONFIG)
 
-# A defconfig is looked for under every architecture, since the one it
-# selects is not known yet.
+# As in Linux, only the configs of ARCH are looked at.  A defconfig of
+# another architecture is named in the error.
 #
-# 在每个架构之下查找 defconfig, 因为此时尚不知道它选择哪个架构.
+# 与 Linux 相同, 只查找 ARCH 的配置. 若该 defconfig 属于另一个架构, 在错误信息
+# 中指出.
 %_defconfig:
-	@test -n "$(wildcard arch/*/configs/$@)" || { echo "$@ not found"; exit 1; }
+	@test -f arch/$(SRCARCH)/configs/$@ || { 		echo "$@ not found in arch/$(SRCARCH)/configs"; 		for f in arch/*/configs/$@; do test -f "$$f" && 			echo "it is in $$f: make ARCH=$$(echo $$f | cut -d/ -f2) $@"; done; 		exit 1; }
 	$(scripts_kconfig) conf
-	$(KCONF) --defconfig=$(firstword $(wildcard arch/*/configs/$@)) Kconfig
+	$(KCONF) --defconfig=arch/$(SRCARCH)/configs/$@ Kconfig
 
 # the minimal configuration, to copy over arch/$(ARCH)/configs/
 # 最小配置, 用于复制到 arch/$(ARCH)/configs/

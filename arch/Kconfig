@@ -1,36 +1,15 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# The architecture is chosen here and kept in .config, as in U-Boot,
-# rather than passed as ARCH= on every make as in Linux.  The Makefile
-# reads SYS_ARCH from include/config/auto.conf.
+# The architecture is ARCH= on the make command line, or in the
+# environment, as in Linux; the Makefile exports SRCARCH.  As Linux's
+# arch/Kconfig, this file reads arch/$(SRCARCH)/Kconfig first, so that
+# the options below can depend on what it defines.
 #
-# 架构在此选择并保存在 .config 中, 与 U-Boot 相同, 不像 Linux 那样每次 make
-# 都以 ARCH= 传入. Makefile 从 include/config/auto.conf 读取 SYS_ARCH.
+# 架构与 Linux 相同, 由 make 命令行或环境变量中的 ARCH= 给出, Makefile 导出
+# SRCARCH. 与 Linux 的 arch/Kconfig 相同, 本文件先读取
+# arch/$(SRCARCH)/Kconfig, 下面的选项因此可以依赖其中定义的符号.
 #
-choice
-	prompt "Architecture"
-	default AVR
-
-config AVR
-	bool "AVR: Arduino Leonardo (ATmega32U4)"
-	help
-	  Leonix runs on the ATmega32U4 of the Arduino Leonardo, behind the
-	  Caterina bootloader.
-
-config ARM
-	bool "ARM: STM32F103 (Cortex-M3)"
-	help
-	  Leonix runs on an STM32F103C8 such as the Blue Pill, from the
-	  start of its Flash, with USART1 on PA9 and PA10 as the console.
-
-endchoice
-
-config SYS_ARCH
-	string
-	default "avr" if AVR
-	default "arm" if ARM
-	help
-	  The directory under arch/ that the kernel is built from.
+source "arch/$(SRCARCH)/Kconfig"
 
 config INIT_CONSOLE
 	string "Terminal that init opens for /bin/sh"
@@ -39,6 +18,3 @@ config INIT_CONSOLE
 	help
 	  The name in /dev of the terminal that becomes standard input
 	  and output of /bin/sh.
-
-source "arch/avr/Kconfig"
-source "arch/arm/Kconfig"
