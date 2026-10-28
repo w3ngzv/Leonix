@@ -316,7 +316,7 @@ int exec(int argc, const char *const argv[])
 	 * 占用 MAX_FDS 项中的一项.
 	 */
 	if (fault) {
-		printk("vm fault %u", fault);
+		pr_info("vm fault %u", fault);
 		err = FAULT_STATUS + fault;
 	} else {
 		err = p->vm.status;

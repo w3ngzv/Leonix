@@ -453,6 +453,20 @@ include/generated/autoconf.h, 随之全部重新编译.
   需要一个 3.3 V 电平的 USB 串口转换器, TX 与 RX 交叉连接并共地.
 - 核心板上 PC13 所接的 LED, 低电平点亮, 由 arch/arm/leds.c 驱动; panic()
   之后常亮.
+- HardFault、MemManage、BusFault 与 UsageFault 使 panic() 在控制台上输出
+  故障时的寄存器, 与 Linux 在 ARM 上的 oops 相近 (arch/arm/panic.c). 下面
+  是在 QEMU 中让 init 任务读取 0x30000000 时的输出, cfsr 的 0x8200 为
+  BFARVALID 与 PRECISERR (PM0056 4.4.11), addr 即 BFAR 中的故障地址::
+
+    PANIC fault task 1
+    pc  0800305e lr  080009bd psr 01000000
+    r0  00000000 r1  00000000 r2  00000000 r3  30000000
+    r4  00000000 r5  00000000 r6  00000000 r7  00000000
+    r8  00000000 r9  00000000 r10 00000000 r11 00000000
+    r12 00000000 frame 20000de0
+    cfsr 00008200 hfsr 00000000 addr 30000000
+
+  frame 是异常栈帧的最低地址, 即压栈完成后的 SP (PM0056 2.3.7).
 - 时钟按上文 "时钟" 一节设为 72 MHz. HSE 或 PLL 在限定的轮询次数内未就绪时,
   CPU 留在 8 MHz 的 HSI 上, SysTick 与 USART 的分频按实际频率计算
   (arch/arm/setup.c).

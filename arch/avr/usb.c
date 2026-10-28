@@ -514,7 +514,7 @@ static void standard_request(const struct setup_packet *setup)
 		if (usb_config)
 			cdc_configure();
 		ep0_ack();
-		printk("usb config %u", usb_config);
+		pr_info("usb config %u", usb_config);
 		break;
 	default:
 		ep0_stall();
@@ -653,7 +653,8 @@ static uint8_t console_open(void)
  * record still in the log and say how many came before it.  A record
  * overwritten before it could be sent is counted the same way.  If the
  * host stops reading, the rest are dropped rather than retried, so that
- * a stalled port costs one timeout per record and no more.
+ * a stalled port costs one timeout per record and no more.  A record of
+ * a level that suppress_message_printing() leaves out is not sent.
  *
  * Kept out of line, so that its line buffer and record are not in
  * usb_task()'s frame under the printk() in standard_request().
@@ -661,6 +662,7 @@ static uint8_t console_open(void)
  * 发送 console_sent 之后的记录. 打开串口时从日志中仍保留的最旧记录开始, 并报告
  * 其前有多少条记录. 来不及发送就被覆盖的记录以同样方式计数. 主机停止读取时, 余
  * 下的记录被丢弃, 不再重试, 使停滞的串口每条记录只耗费一次超时.
+ * suppress_message_printing() 略去的级别的记录不发送.
  *
  * 标为 noinline, 使其行缓冲区与记录不留在 usb_task() 的栈帧中, 位于
  * standard_request() 的 printk() 之下.
@@ -683,6 +685,8 @@ static void __attribute__((noinline)) console_flush(void)
 			lost++;
 			continue;
 		}
+		if (suppress_message_printing(rec.level))
+			continue;
 		if (lost) {
 			len = snprintk(line, sizeof(line), "(%u lost)\r\n", lost);
 			lost = 0;
