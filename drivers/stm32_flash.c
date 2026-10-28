@@ -57,7 +57,6 @@
  */
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 
 #include <asm/sections.h>
 #include <asm/stm32f1.h>
@@ -65,6 +64,7 @@
 #include <leonix/lxfs.h>
 #include <leonix/module.h>
 #include <leonix/printk.h>
+#include <leonix/string.h>
 
 #define PAGE_BYTES	1024u
 #define SLOT_BYTES	(2 * PAGE_BYTES)

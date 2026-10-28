@@ -135,7 +135,11 @@ tests/test_lxfs.c 中一处只在 16 位 int 下出现的有符号比较.
 
 kernel/、fs/、lib/、init/ 与 include/ 中的代码不包含 avr-libc 的头文件:
 开关中断经由 include/leonix/irqflags.h, flash 中的常量经由
-include/leonix/pgmspace.h. arch/avr 中的代码可以直接使用 avr-libc, 例如
+include/leonix/pgmspace.h. 驱动与内核代码也不包含 C 库的 <string.h>, 改为
+包含 include/leonix/string.h, 做法与 Linux 的 include/linux/string.h 相同:
+<asm/string.h> 以 ``__HAVE_ARCH_<NAME>`` 声明架构自己提供的函数, 其余由
+lib/string.c 提供. AVR 上全部由 avr-libc 提供, ARM 上全部取自
+lib/string.c. arch/avr 中的代码可以直接使用 avr-libc, 例如
 arch/avr/time.c 的 ``get_jiffies()`` 使用 ``ATOMIC_BLOCK``. 该节由人检查.
 
 

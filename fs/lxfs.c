@@ -69,11 +69,11 @@
  * 只允许一个任务使用该文件系统, shell 及其运行的程序满足这一条件.
  */
 #include <stddef.h>
-#include <string.h>
 
 #include <leonix/errno.h>
 #include <leonix/fs.h>
 #include <leonix/lxfs.h>
+#include <leonix/string.h>
 
 #define LXFS_BLOCK		32
 #define LXFS_BLOCKS		32

@@ -8,10 +8,10 @@
  * 构建出的程序打包而成, 与 Linux 把最初的程序放在 initramfs 中的做法相同.
  */
 #include <leonix/pgmspace.h>
-#include <string.h>
 
 #include <leonix/errno.h>
 #include <leonix/romfs.h>
+#include <leonix/string.h>
 
 static const uint8_t *entry_data(uint8_t index)
 {

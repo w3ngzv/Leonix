@@ -13,8 +13,8 @@
  * 只占用虚拟机状态与其数据内存. 本文件不依赖 AVR, tests/test_vm.c 因此可以在主
  * 机上运行该解释器.
  */
-#include <string.h>
 
+#include <leonix/string.h>
 #include <leonix/vm.h>
 
 /**

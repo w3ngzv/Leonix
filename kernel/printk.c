@@ -19,11 +19,11 @@
  * 的栈上, 深层调用链 (例如 I2C 传输路径) 中不应调用 printk().
  */
 #include <stdarg.h>
-#include <string.h>
 
 #include <leonix/irqflags.h>
 #include <leonix/jiffies.h>
 #include <leonix/printk.h>
+#include <leonix/string.h>
 
 static struct log_record log_buf[LOG_RECORDS];
 static uint8_t log_next;	/* slot the next record goes into */

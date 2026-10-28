@@ -17,8 +17,8 @@
  * CR LF 发出 (ONLCR). 板上只有一个串口, 因此只有一个终端.
  */
 #include <stddef.h>
-#include <string.h>
 
+#include <leonix/string.h>
 #include <leonix/tty.h>
 
 #define KEY_CTRL_C	0x03
