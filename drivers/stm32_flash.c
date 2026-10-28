@@ -61,6 +61,7 @@
 #include <asm/sections.h>
 #include <asm/stm32f1.h>
 
+#include <leonix/errno.h>
 #include <leonix/lxfs.h>
 #include <leonix/module.h>
 #include <leonix/printk.h>
@@ -407,6 +408,12 @@ static int flash_fs_init(void)
 		break;
 	case LXFS_REPAIRED:
 		pr_warn("lxfs repaired");
+		break;
+	case LXFS_UPGRADED:
+		pr_notice("lxfs upgraded");
+		break;
+	case -ENOSPC:
+		pr_err("lxfs v1 full");
 		break;
 	default:
 		pr_err("lxfs: unknown");
