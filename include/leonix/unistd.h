@@ -9,6 +9,7 @@
 #define STDIN_FILENO	0
 #define STDOUT_FILENO	1
 #define MAX_FDS		4
+_Static_assert(MAX_FDS <= 8, "open_fds() holds one bit per descriptor in a byte");
 
 /*
  * The calls a program makes, named and numbered as in Linux.  There are
@@ -20,6 +21,7 @@
  */
 int open(const char *path, uint16_t flags);
 int close(int fd);
+uint8_t open_fds(void);
 int read(int fd, char *buf, uint8_t count);
 int write(int fd, const char *buf, uint8_t count);
 int readdir(int fd, char *name, uint8_t size);

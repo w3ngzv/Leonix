@@ -213,6 +213,25 @@ int open(const char *path, uint16_t flags)
 }
 
 /**
+ * open_fds() - which descriptors are open
+ *
+ * 哪些描述符处于打开状态.
+ *
+ * Return: bit n set while descriptor n is open.
+ * 描述符 n 打开时第 n 位为 1.
+ */
+uint8_t open_fds(void)
+{
+	uint8_t mask = 0;
+	uint8_t fd;
+
+	for (fd = 0; fd < MAX_FDS; fd++)
+		if (files[fd].f_op)
+			mask |= 1 << fd;
+	return mask;
+}
+
+/**
  * close() - close a descriptor
  * @fd: the descriptor
  *

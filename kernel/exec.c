@@ -273,8 +273,9 @@ int exec(int argc, const char *const argv[])
 {
 	char *path = path_buf;
 	struct proc *p;
-	uint8_t fault;
+	uint8_t fault, fds;
 	int err;
+	int fd;
 
 	if (depth == VM_PROCS)
 		return -ENOMEM;
@@ -311,6 +312,7 @@ int exec(int argc, const char *const argv[])
 	 */
 	if (!depth)
 		exec_task = sched_current();
+	fds = open_fds();
 	depth++;
 	fault = vm_run(&p->vm);
 	depth--;
@@ -321,12 +323,17 @@ int exec(int argc, const char *const argv[])
 	if (depth == 1)
 		flush_signals();
 	/*
-	 * TODO: close the descriptors the program left open, as Linux does
-	 * at exit; each one forgotten holds one of the MAX_FDS slots.
+	 * Close what the program opened and left open, as Linux does at
+	 * exit; a program stopped by Ctrl-C gets no chance to.  What was
+	 * open before, the caller's, stays.
 	 *
-	 * 待办: 与 Linux 在进程退出时相同, 关闭程序未关闭的描述符; 每漏关一个就
-	 * 占用 MAX_FDS 项中的一项.
+	 * 与 Linux 在进程退出时相同, 关闭程序打开后未关闭的描述符; 被 Ctrl-C
+	 * 停止的程序没有机会自行关闭. 运行之前已打开的属于调用者, 保持不变.
 	 */
+	fds = open_fds() & ~fds;
+	for (fd = 0; fd < MAX_FDS; fd++)
+		if (fds & (1 << fd))
+			close(fd);
 	if (fault == VM_INTERRUPTED) {
 		tty_intr_flush();
 		err = FAULT_STATUS + fault;
