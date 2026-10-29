@@ -44,6 +44,8 @@
 #include <avr/pgmspace.h>
 #include <util/delay.h>
 
+#include <leonix/errno.h>
+#include <leonix/exec.h>
 #include <leonix/fs.h>
 #include <leonix/module.h>
 #include <leonix/sched.h>
@@ -122,6 +124,8 @@ static int keypad_read(struct file *f, char *buf, uint8_t count)
 		keypad_down = now;
 		if (pressed)
 			break;
+		if (exec_interrupted())
+			return -EINTR;
 		msleep(KEYPAD_POLL_MS);
 	}
 	for (i = 0; i < KEYPAD_KEYS && n < count; i++)
