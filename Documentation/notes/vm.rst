@@ -135,6 +135,9 @@ exec 与程序的运行
 Ctrl-C 以同一途径停止程序. 没有信号机制, 下层串口驱动把收到的 0x03 交给
 ``tty_receive()``, 后者把 sh 之上每台虚拟机的故障号置为 ``VM_INTERRUPTED``,
 解释器在下一条指令之前停止, 阻塞在系统调用中的程序在该调用返回时停止.
+为程序睡眠等待的驱动改用 ``msleep_interruptible()``, 信号到达时立即醒来并
+返回 ``-EINTR``, 与 Linux 驱动检查 ``signal_pending()`` 相同; 目前只有
+TTP229 键盘如此.
 这一过程在接收路径上完成, 程序是否读取终端不影响结果. sh 自身不被停止,
 与 Linux 中 shell 忽略 SIGINT 相同. 程序停止后 ``exec()`` 丢弃截至该
 Ctrl-C 的输入并回显 ``^C``, 返回 128 加 ``VM_INTERRUPTED``, 不写日志.

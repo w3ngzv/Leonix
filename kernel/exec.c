@@ -22,6 +22,7 @@
 #include <leonix/exec.h>
 #include <leonix/lxfs.h>
 #include <leonix/printk.h>
+#include <leonix/sched.h>
 #include <leonix/string.h>
 #include <leonix/syscall.h>
 #include <leonix/tty.h>
@@ -55,6 +56,8 @@ struct proc {
 
 static struct proc procs[VM_PROCS];
 static uint8_t depth;
+/* the task the programs run in; 运行程序的任务 */
+static uint8_t exec_task;
 
 /*
  * Scratch for paths and exec() arguments, static to keep it off the
@@ -306,9 +309,17 @@ int exec(int argc, const char *const argv[])
 	 * fork() 与 wait(), 没有与 shell 并发的程序, 管道也无从连接. 见
 	 * Documentation/notes/vm.rst.
 	 */
+	if (!depth)
+		exec_task = sched_current();
 	depth++;
 	fault = vm_run(&p->vm);
 	depth--;
+	/*
+	 * back in the shell, which ignores the signal
+	 * 回到 shell, shell 忽略该信号
+	 */
+	if (depth == 1)
+		flush_signals();
 	/*
 	 * TODO: close the descriptors the program left open, as Linux does
 	 * at exit; each one forgotten holds one of the MAX_FDS slots.
@@ -348,24 +359,9 @@ void exec_interrupt(void)
 {
 	uint8_t i;
 
+	if (depth < 2)
+		return;
 	for (i = 1; i < depth; i++)
 		procs[i].vm.fault = VM_INTERRUPTED;
-}
-
-/**
- * exec_interrupted() - whether Ctrl-C has stopped the running program
- *
- * A driver that sleeps in a loop for a program checks this and returns
- * -EINTR, as a Linux driver checks signal_pending(); otherwise the
- * program stops only once the wait ends by itself.
- *
- * 判断 Ctrl-C 是否已停止正在运行的程序. 为程序循环睡眠的驱动检查该函数并返回
- * -EINTR, 与 Linux 驱动检查 signal_pending() 相同; 否则程序要等到等待自行结束
- * 才停止.
- *
- * Context: the task that runs programs.  在运行程序的任务中调用.
- */
-uint8_t exec_interrupted(void)
-{
-	return depth > 1 && procs[depth - 1].vm.fault == VM_INTERRUPTED;
+	signal_wake_up(exec_task);
 }
