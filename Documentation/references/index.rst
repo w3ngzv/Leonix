@@ -51,6 +51,13 @@ HD44780U-Hitachi.pdf
 
   https://cdn.sparkfun.com/assets/9/5/f/7/b/HD44780.pdf
 
+TTP229-Tontek.pdf
+  Tontek, TTP229 TonTouch 16 Keys or 8 Keys Touch Pad Detector IC,
+  Preliminary, Ver 1.0, 2009 年 10 月 30 日. drivers/ttp229.c 的两线
+  串行时序、TP1 与 TP2 选项的依据. 2026-10-28 从 Elecrow 下载:
+
+  https://www.elecrow.com/download/TOUCH_IC_TTP229.pdf
+
 PCF8574-TI.pdf
   Texas Instruments, PCF8574 Remote 8-Bit I/O Expander for I2C Bus,
   SCPS068K, 2001 年 7 月初版, 2024 年 9 月修订.
