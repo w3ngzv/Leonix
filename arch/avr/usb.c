@@ -600,6 +600,8 @@ static void ep0_setup(void)
  */
 static void cdc_rx(void)
 {
+	char c;
+
 	UENUM = CDC_RX_EP;
 	while (UEINTX & (1 << FIFOCON)) {
 		UEINTX = ~(1 << RXOUTI);
@@ -608,8 +610,10 @@ static void cdc_rx(void)
 				acm_rx_held = 1;
 				goto out;
 			}
-			acm_rx_buf[acm_rx_head % ACM_RX_SIZE] = UEDATX;
+			c = UEDATX;
+			acm_rx_buf[acm_rx_head % ACM_RX_SIZE] = c;
 			acm_rx_head++;
+			tty_receive(c);
 		}
 		UEINTX = (uint8_t)~(1 << FIFOCON);
 	}

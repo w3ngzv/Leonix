@@ -71,6 +71,11 @@ enum vm_fault {
 	VM_BAD_ADDRESS,
 	VM_DIVIDE,		/* by zero; 除以零 */
 	VM_BAD_SYSCALL,
+	/*
+	 * Ctrl-C; set from outside the interpreter, see exec_interrupt()
+	 * Ctrl-C; 由解释器之外设置, 见 exec_interrupt()
+	 */
+	VM_INTERRUPTED,
 	VM_EXITED = 0xff,	/* from vm_ops.sys() only; 只由 sys() 返回 */
 };
 
@@ -98,7 +103,11 @@ struct vm {
 	uint16_t code_len;
 	uint16_t pc;
 	uint8_t sp, rsp;
-	uint8_t fault;
+	/*
+	 * volatile: another task or an interrupt may set it while vm_run()
+	 * loops; 其他任务或中断可能在 vm_run() 循环期间设置该字段
+	 */
+	volatile uint8_t fault;
 	int16_t status;			/* set by exit(); 由 exit() 设置 */
 	uint16_t data_len;
 	int16_t ds[VM_DSTACK];

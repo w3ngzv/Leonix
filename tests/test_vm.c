@@ -19,10 +19,17 @@ static uint16_t image_len;
 static char out[64];
 static uint8_t out_len;
 static int fails;
+/*
+ * fetches left before fetch() sets VM_INTERRUPTED as exec_interrupt()
+ * does, 0 for never; 剩余多少次取指后 fetch() 像 exec_interrupt() 那样设置
+ * VM_INTERRUPTED, 0 表示不设置
+ */
+static unsigned int interrupt_after;
 
 static int16_t fetch(struct vm *vm, uint16_t off)
 {
-	(void)vm;
+	if (interrupt_after && !--interrupt_after)
+		vm->fault = VM_INTERRUPTED;
 	return off < image_len ? image[off] : -1;
 }
 
@@ -113,6 +120,14 @@ int main(void)
 		CHECK(run("tests/vm/fault.lx", 4, a4, &vm) == VM_DIVIDE);
 		CHECK(run("tests/vm/fault.lx", 5, a5, &vm) == VM_BAD_ADDRESS);
 	}
+
+	/*
+	 * a fault set from outside stops the machine before its next
+	 * instruction; 从外部设置的故障号使虚拟机在下一条指令之前停止
+	 */
+	interrupt_after = 10;
+	CHECK(run("tests/vm/arith.lx", 1, argv, &vm) == VM_INTERRUPTED);
+	CHECK(interrupt_after == 0 && out_len == 0);
 
 	/* a bad header is refused; 拒绝错误的文件头 */
 	memset(&vm, 0, sizeof(vm));

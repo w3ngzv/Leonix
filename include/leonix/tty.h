@@ -11,5 +11,7 @@
 #define TTY_LINE	32
 
 int tty_register(const char *name, const struct file_operations *raw);
+void tty_receive(char c);
+void tty_intr_flush(void);
 
 #endif /* _LEONIX_TTY_H */
