@@ -2,6 +2,8 @@
 #ifndef _LEONIX_EXEC_H
 #define _LEONIX_EXEC_H
 
+#include <stdint.h>
+
 /*
  * most words a command line is cut into, the program name included
  * 一条命令行至多切分成的词数, 含程序名
@@ -10,5 +12,6 @@
 
 int exec(int argc, const char *const argv[]);
 void exec_interrupt(void);
+uint8_t exec_interrupted(void);
 
 #endif /* _LEONIX_EXEC_H */

@@ -351,3 +351,21 @@ void exec_interrupt(void)
 	for (i = 1; i < depth; i++)
 		procs[i].vm.fault = VM_INTERRUPTED;
 }
+
+/**
+ * exec_interrupted() - whether Ctrl-C has stopped the running program
+ *
+ * A driver that sleeps in a loop for a program checks this and returns
+ * -EINTR, as a Linux driver checks signal_pending(); otherwise the
+ * program stops only once the wait ends by itself.
+ *
+ * 判断 Ctrl-C 是否已停止正在运行的程序. 为程序循环睡眠的驱动检查该函数并返回
+ * -EINTR, 与 Linux 驱动检查 signal_pending() 相同; 否则程序要等到等待自行结束
+ * 才停止.
+ *
+ * Context: the task that runs programs.  在运行程序的任务中调用.
+ */
+uint8_t exec_interrupted(void)
+{
+	return depth > 1 && procs[depth - 1].vm.fault == VM_INTERRUPTED;
+}
