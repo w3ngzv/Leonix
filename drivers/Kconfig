@@ -26,7 +26,9 @@ config HD44780
 	help
 	  A 16x2 HD44780 display behind a PCF8574 I2C expander.  A task
 	  shows the idle share and the uptime on it once a second, and
-	  panic() writes its reason there.
+	  panic() writes its reason there.  Programs write to it through
+	  /dev/lcd; after the first write the task leaves the display
+	  alone until reset.
 
 	  Without it the same task only reports stack usage to the kernel
 	  log.
@@ -45,5 +47,22 @@ config SWD_DAP
 	  Memory reads and writes, halt, run and reset of the target, one
 	  command per line written to /dev/dap, for a script on the host.
 	  Also measures a square wave on D13 with Timer3.
+
+config TTP229
+	bool "TTP229 touch keypad"
+	depends on AVR
+	help
+	  A TTP229 16-key capacitive keypad, such as the HW-136 board, on
+	  A0 (SCL) and A1 (SDO), as /dev/keypad.  Each read returns one
+	  character per key touched, '1' to '9' and 'a' to 'g' for keys 1
+	  to 16.  The board must be set to 16-key mode, P1 pin 3 shorted.
+
+config TTP229_8_KEYS
+	bool "Keypad left in 8-key mode"
+	depends on TTP229
+	help
+	  For a board with P1 pin 3 open, the TTP229's default: only keys
+	  1 to 8 report, and only 8 bits are clocked out.  A board in
+	  16-key mode read this way loses keys 9 to 16.
 
 endmenu

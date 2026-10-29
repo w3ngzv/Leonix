@@ -12,5 +12,7 @@ int lcd_set_cursor(uint8_t col, uint8_t row);
 int lcd_puts(const char *s);
 int lcd_check(void);
 uint8_t lcd_address(void);
+int lcd_lock(void);
+void lcd_unlock(void);
 
 #endif /* _LEONIX_LCD_H */

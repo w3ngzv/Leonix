@@ -24,8 +24,12 @@
 #include <avr/pgmspace.h>
 #include <util/delay.h>
 
+#include <leonix/errno.h>
+#include <leonix/fs.h>
 #include <leonix/i2c.h>
 #include <leonix/lcd.h>
+#include <leonix/module.h>
+#include <leonix/mutex.h>
 #include <leonix/panic.h>
 #include <leonix/sched.h>
 
@@ -60,6 +64,20 @@
 #define LCD_CLEAR_MS	2
 
 static uint8_t pcf_addr;
+
+/*
+ * Each byte is two transfers, so two tasks writing at once would mix
+ * their nibbles; the status task and /dev/lcd both take this.
+ *
+ * 每个字节分两次传输, 两个任务同时写入时半字节会相互交错; 状态任务与
+ * /dev/lcd 都先获取该锁.
+ */
+static struct mutex lcd_mutex = MUTEX_INIT;
+/* set by the first write to /dev/lcd; 首次写入 /dev/lcd 时置位 */
+static uint8_t lcd_dev_claimed;
+/* cleared when a write fails; 写入失败时清零 */
+static uint8_t lcd_dev_ready;
+static uint8_t lcd_x, lcd_y;
 
 /*
  * After panic() the scheduler must not be entered, so the wait becomes a
@@ -126,14 +144,6 @@ static int lcd_clear(void)
 	lcd_delay(LCD_CLEAR_MS);
 	return 0;
 }
-
-/*
- * TODO: register the display as a character device, /dev/lcd, so that
- * it can be a second terminal; today only main.c writes to it.
- *
- * 待办: 把显示屏登记为字符设备 /dev/lcd, 使其可以作为第二个终端; 目前只有
- * main.c 向其写入.
- */
 
 /**
  * lcd_init() - find the expander and initialise the display
@@ -260,3 +270,117 @@ uint8_t lcd_address(void)
 {
 	return pcf_addr;
 }
+
+/**
+ * lcd_lock() - take the display for the status task
+ *
+ * 为状态任务获取显示屏.
+ *
+ * Context: a task.  在任务中调用.
+ * Return: 0 with the lock held, or -1 once /dev/lcd has been written:
+ * the display is then the device's until reset, and the lock is not
+ * held.  成功时返回 0 并持有锁; /dev/lcd 已被写入过时返回 -1, 此后直到
+ * 复位显示屏都归该设备使用, 锁不被持有.
+ */
+int lcd_lock(void)
+{
+	mutex_lock(&lcd_mutex);
+	if (!lcd_dev_claimed)
+		return 0;
+	mutex_unlock(&lcd_mutex);
+	return -1;
+}
+
+/**
+ * lcd_unlock() - release the display after lcd_lock() returned 0
+ *
+ * 在 lcd_lock() 返回 0 之后释放显示屏.
+ *
+ * Context: a task.  在任务中调用.
+ */
+void lcd_unlock(void)
+{
+	mutex_unlock(&lcd_mutex);
+}
+
+/*
+ * The control characters of Linux's drivers/auxdisplay/charlcd.c, minus
+ * its escape sequences.  Past the last column characters are dropped,
+ * so the HD44780 never wraps into the off-screen part of DDRAM.
+ *
+ * 控制字符的处理取自 Linux 的 drivers/auxdisplay/charlcd.c, 不含其转义序列.
+ * 超过最后一列的字符被丢弃, HD44780 因此不会写到 DDRAM 中屏幕之外的部分.
+ */
+static int lcd_dev_putc(char c)
+{
+	switch (c) {
+	case '\b':
+		if (lcd_x)
+			lcd_x--;
+		if (lcd_set_cursor(lcd_x, lcd_y) < 0 ||
+		    lcd_write_byte(' ', PCF_RS) < 0)
+			return -1;
+		break;
+	case '\f':
+		lcd_x = lcd_y = 0;
+		return lcd_clear();
+	case '\n':
+		for (; lcd_x < LCD_COLS; lcd_x++)
+			if (lcd_write_byte(' ', PCF_RS) < 0)
+				return -1;
+		lcd_x = 0;
+		lcd_y = (lcd_y + 1) % LCD_ROWS;
+		break;
+	case '\r':
+		lcd_x = 0;
+		break;
+	case '\t':
+		c = ' ';
+		/* fall through */
+	default:
+		if (lcd_x >= LCD_COLS)
+			return 0;
+		lcd_x++;
+		return lcd_write_byte((uint8_t)c, PCF_RS);
+	}
+	return lcd_set_cursor(lcd_x, lcd_y);
+}
+
+/*
+ * The first write clears the display, as Linux's charlcd_open() does on
+ * its first open, and so does the write after a failed one, since the
+ * backpack may have lost power.
+ *
+ * 首次写入时清屏, 与 Linux 的 charlcd_open() 首次打开时相同; 写入失败之后的
+ * 下一次写入同样清屏, 因为转接板可能已经断电.
+ */
+static int lcd_dev_write(struct file *f, const char *buf, uint8_t count)
+{
+	int err = 0;
+	uint8_t i;
+
+	(void)f;
+	mutex_lock(&lcd_mutex);
+	lcd_dev_claimed = 1;
+	if (!lcd_dev_ready) {
+		lcd_x = lcd_y = 0;
+		lcd_dev_ready = lcd_init() == 0;
+	}
+	for (i = 0; lcd_dev_ready && i < count; i++)
+		if (lcd_dev_putc(buf[i]) < 0)
+			lcd_dev_ready = 0;
+	if (!lcd_dev_ready)
+		err = -EIO;
+	mutex_unlock(&lcd_mutex);
+	return err ? err : count;
+}
+
+static const struct file_operations lcd_fops = {
+	.write = lcd_dev_write,
+};
+
+static int lcd_dev_init(void)
+{
+	return register_chrdev(PSTR("lcd"), &lcd_fops);
+}
+module_init(lcd_dev_init);
