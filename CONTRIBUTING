@@ -28,8 +28,8 @@ target: int is 16 bits under avr-gcc, interrupts and tasks share
 2.5 KiB of SRAM, and the EEPROM can lose power in the middle of a
 write.
 
-Every code comment is written in English and in Chinese.  The Chinese
-text is the authoritative one, and both are changed in the same commit.
+Code comments are written in English or in Chinese; one language is
+enough.  A comment explains what the code alone does not make clear.
 
 
 Checks
