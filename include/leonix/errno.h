@@ -7,6 +7,7 @@
  * 编号取自 Linux 的 include/uapi/asm-generic/errno-base.h
  */
 #define ENOENT		2
+#define EINTR		4
 #define EIO		5
 #define E2BIG		7
 #define ENOEXEC		8
