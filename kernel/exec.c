@@ -22,8 +22,10 @@
 #include <leonix/exec.h>
 #include <leonix/lxfs.h>
 #include <leonix/printk.h>
+#include <leonix/sched.h>
 #include <leonix/string.h>
 #include <leonix/syscall.h>
+#include <leonix/tty.h>
 #include <leonix/unistd.h>
 #include <leonix/vm.h>
 
@@ -54,6 +56,8 @@ struct proc {
 
 static struct proc procs[VM_PROCS];
 static uint8_t depth;
+/* the task the programs run in; 运行程序的任务 */
+static uint8_t exec_task;
 
 /*
  * Scratch for paths and exec() arguments, static to keep it off the
@@ -269,8 +273,9 @@ int exec(int argc, const char *const argv[])
 {
 	char *path = path_buf;
 	struct proc *p;
-	uint8_t fault;
+	uint8_t fault, fds;
 	int err;
+	int fd;
 
 	if (depth == VM_PROCS)
 		return -ENOMEM;
@@ -305,17 +310,34 @@ int exec(int argc, const char *const argv[])
 	 * fork() 与 wait(), 没有与 shell 并发的程序, 管道也无从连接. 见
 	 * Documentation/notes/vm.rst.
 	 */
+	if (!depth)
+		exec_task = sched_current();
+	fds = open_fds();
 	depth++;
 	fault = vm_run(&p->vm);
 	depth--;
 	/*
-	 * TODO: close the descriptors the program left open, as Linux does
-	 * at exit; each one forgotten holds one of the MAX_FDS slots.
-	 *
-	 * 待办: 与 Linux 在进程退出时相同, 关闭程序未关闭的描述符; 每漏关一个就
-	 * 占用 MAX_FDS 项中的一项.
+	 * back in the shell, which ignores the signal
+	 * 回到 shell, shell 忽略该信号
 	 */
-	if (fault) {
+	if (depth == 1)
+		flush_signals();
+	/*
+	 * Close what the program opened and left open, as Linux does at
+	 * exit; a program stopped by Ctrl-C gets no chance to.  What was
+	 * open before, the caller's, stays.
+	 *
+	 * 与 Linux 在进程退出时相同, 关闭程序打开后未关闭的描述符; 被 Ctrl-C
+	 * 停止的程序没有机会自行关闭. 运行之前已打开的属于调用者, 保持不变.
+	 */
+	fds = open_fds() & ~fds;
+	for (fd = 0; fd < MAX_FDS; fd++)
+		if (fds & (1 << fd))
+			close(fd);
+	if (fault == VM_INTERRUPTED) {
+		tty_intr_flush();
+		err = FAULT_STATUS + fault;
+	} else if (fault) {
 		pr_info("vm fault %u", fault);
 		err = FAULT_STATUS + fault;
 	} else {
@@ -325,4 +347,28 @@ out:
 	if (p->code.f_op->release)
 		p->code.f_op->release(&p->code);
 	return err;
+}
+
+/**
+ * exec_interrupt() - stop the programs the shell runs, on Ctrl-C
+ *
+ * procs[0] is the program init runs, the shell, and is left running, as
+ * a shell in Linux ignores SIGINT.  Every machine above it stops before
+ * its next instruction, or when the system call it is in returns.
+ *
+ * 停止 shell 所运行的程序, 由 Ctrl-C 触发. procs[0] 是 init 运行的程序, 即
+ * shell, 不被停止, 与 Linux 中 shell 忽略 SIGINT 相同. 其上的每台虚拟机在下
+ * 一条指令之前停止, 或在所处的系统调用返回时停止.
+ *
+ * Context: any task, or an interrupt.  可在任意任务或中断中调用.
+ */
+void exec_interrupt(void)
+{
+	uint8_t i;
+
+	if (depth < 2)
+		return;
+	for (i = 1; i < depth; i++)
+		procs[i].vm.fault = VM_INTERRUPTED;
+	signal_wake_up(exec_task);
 }

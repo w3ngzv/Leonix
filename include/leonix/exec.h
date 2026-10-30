@@ -9,5 +9,6 @@
 #define MAX_ARGS	6
 
 int exec(int argc, const char *const argv[]);
+void exec_interrupt(void);
 
 #endif /* _LEONIX_EXEC_H */

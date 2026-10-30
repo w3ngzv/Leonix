@@ -178,6 +178,7 @@ static void usart1_interrupt(void)
 		if ((uint8_t)(rx_head - rx_tail) != RX_SIZE) {
 			rx_buf[rx_head % RX_SIZE] = c;
 			rx_head++;
+			tty_receive(c);
 		}
 		woken += wake_up(&rx_wq);
 	}

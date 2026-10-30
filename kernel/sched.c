@@ -11,6 +11,7 @@
  * 准. 睡眠的任务在唤醒时间之前被跳过; 所有任务都在睡眠时, 空闲任务使 CPU 进入
  * Idle 模式, 直到下一个中断.
  */
+#include <leonix/errno.h>
 #include <leonix/irqflags.h>
 #include <leonix/jiffies.h>
 #include <leonix/panic.h>
@@ -50,6 +51,18 @@ static uint8_t idle_stack[IDLE_STACK_SIZE];
 static uint32_t idle_ticks;
 
 struct task *current;
+
+/*
+ * One bit per task, as struct wait_queue: a signal is pending, and the
+ * task sleeps in msleep_interruptible().  Both change with interrupts
+ * off.  The only signal is Ctrl-C, see exec_interrupt().
+ *
+ * 每个任务一位, 与 struct wait_queue 相同: 有待处理的信号; 任务正在
+ * msleep_interruptible() 中睡眠. 两者都在关中断时修改. 唯一的信号是 Ctrl-C,
+ * 见 exec_interrupt().
+ */
+static volatile uint8_t sig_pending;
+static uint8_t sig_waiting;
 
 /*
  * An entry function that returns lands here, see task_init().  The task
@@ -395,6 +408,96 @@ uint8_t wake_up(struct wait_queue *wq)
 void msleep(uint16_t ms)
 {
 	sleep_until(get_jiffies() + ms + 1);
+}
+
+/**
+ * msleep_interruptible() - msleep() that a signal ends early
+ * @ms: milliseconds
+ *
+ * Linux returns the milliseconds left; every caller here only needs to
+ * know whether to give up.
+ *
+ * 与 msleep() 相同, 但信号到达时提前返回. Linux 的同名函数返回剩余的毫秒数,
+ * 这里的调用者只需要知道是否放弃.
+ *
+ * Context: a task, after sched_start().
+ * 在 sched_start() 之后由任务调用.
+ * Return: 0, or -EINTR if a signal is pending.
+ * 返回 0; 有待处理的信号时返回 -EINTR.
+ */
+int msleep_interruptible(uint16_t ms)
+{
+	uint8_t bit = 1 << current_index;
+
+	/*
+	 * Interrupts stay off from the test to the sleep, so a signal
+	 * cannot fall between them.
+	 *
+	 * 从检查到睡眠一直关中断, 信号因此无法落在两者之间.
+	 */
+	local_irq_disable();
+	if (!(sig_pending & bit)) {
+		sig_waiting |= bit;
+		sleep_until(get_jiffies() + ms + 1);
+		local_irq_disable();
+		sig_waiting &= ~bit;
+	}
+	local_irq_enable();
+	return signal_pending() ? -EINTR : 0;
+}
+
+/**
+ * signal_wake_up() - make a signal pending for a task
+ * @index: the task
+ *
+ * A task in msleep_interruptible() becomes runnable at once.
+ *
+ * 使任务 @index 有一个待处理的信号. 正在 msleep_interruptible() 中睡眠的任务立
+ * 即变为可运行.
+ *
+ * Context: a task or an interrupt handler.
+ * 任务或中断处理程序.
+ */
+void signal_wake_up(uint8_t index)
+{
+	uint8_t bit = 1 << index;
+	unsigned long flags;
+
+	local_irq_save(flags);
+	sig_pending |= bit;
+	if ((sig_waiting & bit) && tasks[index].state == TASK_SLEEPING)
+		tasks[index].state = TASK_RUNNABLE;
+	local_irq_restore(flags);
+}
+
+/**
+ * signal_pending() - whether the current task has a signal pending
+ *
+ * 当前任务是否有待处理的信号.
+ *
+ * Context: a task.  在任务中调用.
+ * Return: 1 if a signal is pending, else 0.
+ * 有待处理的信号时返回 1, 否则返回 0.
+ */
+uint8_t signal_pending(void)
+{
+	return !!(sig_pending & (1 << current_index));
+}
+
+/**
+ * flush_signals() - drop the current task's pending signal
+ *
+ * 丢弃当前任务待处理的信号.
+ *
+ * Context: a task.  在任务中调用.
+ */
+void flush_signals(void)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	sig_pending &= ~(1 << current_index);
+	local_irq_restore(flags);
 }
 
 /*
